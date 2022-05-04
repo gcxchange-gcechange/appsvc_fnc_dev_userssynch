@@ -12,13 +12,6 @@ namespace appsvc_fnc_dev_userssynch
         public string Email { get; set; }
     }
 
-    public class group_users
-    {
-        public string B2BGroupSyncAlias { get; set; }
-        public string groupAliasToUsersMapping { get; set; }
-
-    }
-
     public class Table_Ref : TableEntity
     {
         public Table_Ref(string skey, string srow)

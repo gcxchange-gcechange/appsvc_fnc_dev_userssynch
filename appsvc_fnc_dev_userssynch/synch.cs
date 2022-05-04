@@ -26,7 +26,6 @@ namespace appsvc_fnc_dev_userssynch
         {
             log.LogInformation("C# HTTP trigger function processed a request.");
 
-                    //string[,] department = new string[,] { { "Cipher", "fc30239e-4e0f-4274-a0e0-2b10605f3c96", "111", "28d8f6f0-3824-448a-9247-b88592acc8b7", "Cipher_GCX_Access", "852e3cd8-d27f-4e1b-af69-88f1147dcbc8" }, { "TBS", "9e84d6ef-ec00-434f-9c7f-e5d2baf1f29b", "056", "28d8f6f0-3824-448a-9247-b88592acc8b7", "TBS_GCX_Access", "d59a06ea-ccac-49e7-bd5c-08e911b2473b" } };
             var config = new ConfigurationBuilder()
                 .SetBasePath(context.FunctionAppDirectory)
                 .AddJsonFile("local.settings.json", true, true)
@@ -35,7 +34,6 @@ namespace appsvc_fnc_dev_userssynch
             CloudStorageAccount storageAccount = CloudStorageAccount.Parse(config["AzureWebJobsStorage"]);
             string containerName = config["containerName"];
             string tableName = config["tableName"];
-
 
             CloudTableClient tableClient = storageAccount.CreateCloudTableClient();
 
@@ -55,63 +53,61 @@ namespace appsvc_fnc_dev_userssynch
                     string group_alias = item.group_alias;
                     string groupid = item.group_id;
 
-                    log.LogInformation(cliendID);
+                    Auth auth = new Auth();
+                    var graphAPIAuth = auth.graphAuth(cliendID, rg_code, tenantid, log);
 
-                Auth auth = new Auth();
-                var graphAPIAuth = auth.graphAuth(cliendID, rg_code, tenantid, log);
+                    List<User> users = new List<User>();
+                    var groupMembers = await graphAPIAuth.Groups[groupid].Members.Request().GetAsync();
 
-                List<User> users = new List<User>();
-                var groupMembers = await graphAPIAuth.Groups[groupid].Members.Request().GetAsync();
-
-                users.AddRange(groupMembers.CurrentPage.OfType<User>());
-                // fetch next page
-                while (groupMembers.NextPageRequest != null)
-                {
-                    groupMembers = await groupMembers.NextPageRequest.GetAsync();
                     users.AddRange(groupMembers.CurrentPage.OfType<User>());
-                }
+                    // fetch next page
+                    while (groupMembers.NextPageRequest != null)
+                    {
+                        groupMembers = await groupMembers.NextPageRequest.GetAsync();
+                        users.AddRange(groupMembers.CurrentPage.OfType<User>());
+                    }
 
-                //List of user
-                List<string> userList = new List<string>();
-                foreach (var user in users)
-                {
-                    userList.Add(user.Mail);
-                }
-                var list_of_users = string.Join(",", userList);
+                    //List of user
+                    List<string> userList = new List<string>();
+                    foreach (var user in users)
+                    {
+                        userList.Add(user.Mail);
+                    }
 
-                //create mapping field value
-                string grouplist = $"{{{groupid}:[{list_of_users}]}}";
-               
-                //create group object
-                List<group_users> groupList = new List<group_users>();
-                groupList.Add(new group_users()
-                {
-                    B2BGroupSyncAlias = group_alias,
-                    groupAliasToUsersMapping = grouplist
-                });
+                    //Getting member list map to user group id
+                    Dictionary<string, dynamic> members =
+                        new Dictionary<string, dynamic>();
 
-                //group object into json
-                string json = JsonConvert.SerializeObject(groupList.ToArray());
+                        members.Add(groupid, userList);
+                
+                    // Getting the mapping object
+                    Dictionary<string, dynamic> mapping =
+                        new Dictionary<string, dynamic>();
 
-                // CloudStorageAccount storageAccount = GetCloudStorageAccount;
-                CreateContainerIfNotExists(log, containerName, storageAccount);
-                CloudBlobClient blobClient = storageAccount.CreateCloudBlobClient();
-                CloudBlobContainer container = blobClient.GetContainerReference(containerName);
+                        mapping.Add("B2BGroupSyncAlias", group_alias);
+                        mapping.Add("groupAliasToUsersMapping", members);
 
-                //CreateFil e Title
-                string FileTitle = $"{group_alias}User_Group.json";
+                    //group object into json
+                    string json = JsonConvert.SerializeObject(mapping.ToArray());
 
-                CloudBlockBlob blob = container.GetBlockBlobReference(FileTitle);
+                    CreateContainerIfNotExists(log, containerName, storageAccount);
+                    CloudBlobClient blobClient = storageAccount.CreateCloudBlobClient();
+                    CloudBlobContainer container = blobClient.GetContainerReference(containerName);
 
-                blob.Properties.ContentType = "application/json";
+                    //CreateFil e Title
+                    string FileTitle = $"{group_alias}User_Group.json";
 
-                using (var ms = new MemoryStream())
-                {
-                    LoadStreamWithJson(ms, json);
-                    await blob.UploadFromStreamAsync(ms);
-                }
+                    CloudBlockBlob blob = container.GetBlockBlobReference(FileTitle);
 
-                await blob.SetPropertiesAsync();
+                    blob.Properties.ContentType = "application/json";
+
+                    using (var ms = new MemoryStream())
+                    {
+                        LoadStreamWithJson(ms, json);
+                        await blob.UploadFromStreamAsync(ms);
+                    }
+
+                    await blob.SetPropertiesAsync();
                 }
                 token = queryResult.ContinuationToken;
             } while (token != null);
