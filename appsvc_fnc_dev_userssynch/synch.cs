@@ -57,8 +57,6 @@ namespace appsvc_fnc_dev_userssynch
                 // var domainsList = JsonConvert.SerializeObject(contents);
                 var domainsList = JsonConvert.DeserializeObject<List<UserDomainList>>(contents);
 
-
-
                 var q = new TableQuery<Table_Ref>();
                 var queryResult = await table.ExecuteQuerySegmentedAsync(q, token);
                 foreach (var item in queryResult.Results)
@@ -67,59 +65,61 @@ namespace appsvc_fnc_dev_userssynch
                     string rg_code = item.rg_code;
                     string tenantid = item.tenant_id;
                     string group_alias = item.group_alias;
-                    string groupid = item.group_id;
+                    string allgroupid = item.group_id;
 
                     Auth auth = new Auth();
                     var graphAPIAuth = auth.graphAuth(cliendID, rg_code, tenantid, log);
 
-                    List<User> users = new List<User>();
-                    var groupMembers = await graphAPIAuth.Groups[groupid].Members.Request().Select("userType,mail").GetAsync();
+                    Dictionary<string, dynamic> members = new Dictionary<string, dynamic>();
 
-                    users.AddRange(groupMembers.CurrentPage.OfType<User>());
-                    // fetch next page
-                    while (groupMembers.NextPageRequest != null)
+                    //Get all group id
+                    var array_groupid = allgroupid.Split(",");
+                    foreach (var groupid in array_groupid)
                     {
-                        groupMembers = await groupMembers.NextPageRequest.GetAsync();
+                        List<User> users = new List<User>();
+                        var groupMembers = await graphAPIAuth.Groups[groupid.ToString()].Members.Request().Select("userType,mail").GetAsync();
+
                         users.AddRange(groupMembers.CurrentPage.OfType<User>());
-                    }
-
-                    //List of user
-                    List<string> userList = new List<string>();
-                    foreach (var user in users)
-                    {
-                        //check if user is a guest
-                        if(user.UserType != "Guest")
+                        // fetch next page
+                        while (groupMembers.NextPageRequest != null)
                         {
-                            //get user domain
-                            string UserDomain = user.Mail.Split("@")[1];
-                            bool domainMatch = false;
+                            groupMembers = await groupMembers.NextPageRequest.GetAsync();
+                            users.AddRange(groupMembers.CurrentPage.OfType<User>());
+                        }
 
-                            //check if domain part of the domain list
-                            foreach (var domain in domainsList)
+                        //List of user
+                        List<string> userList = new List<string>();
+                        foreach (var user in users)
+                        {
+                            //check if user is a guest
+                            if(user.UserType != "Guest")
                             {
-                                if (domain.UserDomains.Contains(UserDomain))
+                                //get user domain
+                                string UserDomain = user.Mail.Split("@")[1];
+                                bool domainMatch = false;
+
+                                //check if domain part of the domain list
+                                foreach (var domain in domainsList)
                                 {
-                                    userList.Add(user.Mail);
-                                    domainMatch = true;
+                                    if (domain.UserDomains.Contains(UserDomain))
+                                    {
+                                        userList.Add(user.Mail);
+                                        domainMatch = true;
+                                    }
+                                }
+                                if (!domainMatch)
+                                {
+                                    log.LogError($"User domain do not exist {user.Mail}.");
                                 }
                             }
-                            if (!domainMatch)
+                            else
                             {
-                                log.LogError($"User domain do not exist {user.Mail}.");
+                                log.LogError($"User is a guest {user.Mail}.");
                             }
                         }
-                        else
-                        {
-                            log.LogError($"User is a guest {user.Mail}.");
-                        }
+                        //Getting member list map to user group id
+                        members.Add(groupid.ToString(), userList);
                     }
-
-                    //Getting member list map to user group id
-                    Dictionary<string, dynamic> members =
-                        new Dictionary<string, dynamic>();
-
-                        members.Add(groupid, userList);
-                
                     // Getting the mapping object
                     Dictionary<string, dynamic> mapping =
                         new Dictionary<string, dynamic>();
