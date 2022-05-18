@@ -27,4 +27,19 @@ namespace appsvc_fnc_dev_userssynch
         public string group_alias { get; set; }
         public string group_id { get; set; }
     }
+
+    public class UserDomainList
+    {
+        public string Alias { get; set; }
+        public string EnglishName { get; set; }
+        public string FrenchName { get; set; }
+        public string[] UserDomains { get; set; }
+        public string AADOrgDomain { get; set; }
+        public string AppOnlyServicePrincipalClientIdKeyVaultSecretName { get; set; }
+        public string AppOnlyServicePrincipalClientSecretKeyVaultSecretName { get; set; }
+        public string AppOnlyServicePrincipalClientIdAutomationAccountCredentialName { get; set; }
+        public string AppOnlyServicePrincipalClientSecretAutomationAccountCredentialName { get; set; }
+
+    }
+
 }

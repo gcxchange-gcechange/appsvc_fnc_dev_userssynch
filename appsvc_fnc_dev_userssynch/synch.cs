@@ -33,16 +33,32 @@ namespace appsvc_fnc_dev_userssynch
 
             CloudStorageAccount storageAccount = CloudStorageAccount.Parse(config["AzureWebJobsStorage"]);
             string containerName = config["containerName"];
+            string containerNameRef = config["containerNameRef"];
             string tableName = config["tableName"];
+            string fileNameDomain = config["fileNameDomain"];
+
 
             CloudTableClient tableClient = storageAccount.CreateCloudTableClient();
 
-            // Get user that never sign in
             CloudTable table = tableClient.GetTableReference(tableName);
 
             TableContinuationToken token = null;
             do
             {
+                //get domain config file
+                // Connect to the blob storage
+                CloudBlobClient serviceClient = storageAccount.CreateCloudBlobClient();
+                // Connect to the blob container
+                CloudBlobContainer containerRef = serviceClient.GetContainerReference($"{containerNameRef}");
+                // Connect to the blob file
+                CloudBlockBlob blobRef = containerRef.GetBlockBlobReference($"{fileNameDomain}");
+                // Get the blob file as text
+                string contents = blobRef.DownloadTextAsync().Result;
+                // var domainsList = JsonConvert.SerializeObject(contents);
+                var domainsList = JsonConvert.DeserializeObject<List<UserDomainList>>(contents);
+
+
+
                 var q = new TableQuery<Table_Ref>();
                 var queryResult = await table.ExecuteQuerySegmentedAsync(q, token);
                 foreach (var item in queryResult.Results)
@@ -57,7 +73,7 @@ namespace appsvc_fnc_dev_userssynch
                     var graphAPIAuth = auth.graphAuth(cliendID, rg_code, tenantid, log);
 
                     List<User> users = new List<User>();
-                    var groupMembers = await graphAPIAuth.Groups[groupid].Members.Request().GetAsync();
+                    var groupMembers = await graphAPIAuth.Groups[groupid].Members.Request().Select("userType,mail").GetAsync();
 
                     users.AddRange(groupMembers.CurrentPage.OfType<User>());
                     // fetch next page
@@ -71,7 +87,31 @@ namespace appsvc_fnc_dev_userssynch
                     List<string> userList = new List<string>();
                     foreach (var user in users)
                     {
-                        userList.Add(user.Mail);
+                        //check if user is a guest
+                        if(user.UserType != "Guest")
+                        {
+                            //get user domain
+                            string UserDomain = user.Mail.Split("@")[1];
+                            bool domainMatch = false;
+
+                            //check if domain part of the domain list
+                            foreach (var domain in domainsList)
+                            {
+                                if (domain.UserDomains.Contains(UserDomain))
+                                {
+                                    userList.Add(user.Mail);
+                                    domainMatch = true;
+                                }
+                            }
+                            if (!domainMatch)
+                            {
+                                log.LogError($"User domain do not exist {user.Mail}.");
+                            }
+                        }
+                        else
+                        {
+                            log.LogError($"User is a guest {user.Mail}.");
+                        }
                     }
 
                     //Getting member list map to user group id
