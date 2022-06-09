@@ -37,7 +37,6 @@ namespace appsvc_fnc_dev_userssynch
             string tableName = config["tableName"];
             string fileNameDomain = config["fileNameDomain"];
 
-
             CloudTableClient tableClient = storageAccount.CreateCloudTableClient();
 
             CloudTable table = tableClient.GetTableReference(tableName);
@@ -70,7 +69,7 @@ namespace appsvc_fnc_dev_userssynch
                     Auth auth = new Auth();
                     var graphAPIAuth = auth.graphAuth(cliendID, rg_code, tenantid, log);
 
-                    Dictionary<string, dynamic> members = new Dictionary<string, dynamic>();
+                    string stringUserList = "";
 
                     //Get all group id
                     var array_groupid = allgroupid.Split(",");
@@ -117,25 +116,19 @@ namespace appsvc_fnc_dev_userssynch
                                 log.LogError($"User is a guest {user.Mail}.");
                             }
                         }
-                        //Getting member list map to user group id
-                        members.Add(groupid.ToString(), userList);
+                        var res = string.Join("\",\"", userList);
+                        stringUserList += $"\"{groupid.ToString()}\":[\"{res}\"],";
                     }
-                    // Getting the mapping object
-                    Dictionary<string, dynamic> mapping =
-                        new Dictionary<string, dynamic>();
-
-                        mapping.Add("B2BGroupSyncAlias", group_alias);
-                        mapping.Add("groupAliasToUsersMapping", members);
-
                     //group object into json
-                    string json = JsonConvert.SerializeObject(mapping.ToArray());
-
                     CreateContainerIfNotExists(log, containerName, storageAccount);
                     CloudBlobClient blobClient = storageAccount.CreateCloudBlobClient();
                     CloudBlobContainer container = blobClient.GetContainerReference(containerName);
 
+                    string resultUserList = stringUserList.Remove(stringUserList.Length - 1);
+
                     //CreateFil e Title
                     string FileTitle = $"{group_alias}User_Group.json";
+                    var stringInsideTheFile = $"{{\"B2BGroupSyncAlias\": \"{group_alias}\",\"groupAliasToUsersMapping\":{{ {resultUserList} }} }}";
 
                     CloudBlockBlob blob = container.GetBlockBlobReference(FileTitle);
 
@@ -143,7 +136,7 @@ namespace appsvc_fnc_dev_userssynch
 
                     using (var ms = new MemoryStream())
                     {
-                        LoadStreamWithJson(ms, json);
+                        LoadStreamWithJson(ms, stringInsideTheFile);
                         await blob.UploadFromStreamAsync(ms);
                     }
 
