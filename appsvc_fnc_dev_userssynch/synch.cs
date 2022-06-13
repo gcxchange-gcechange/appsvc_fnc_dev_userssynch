@@ -126,10 +126,14 @@ namespace appsvc_fnc_dev_userssynch
 
                     string resultUserList = stringUserList.Remove(stringUserList.Length - 1);
 
-                    //CreateFil e Title
+                    //CreateFile Title
                     string FileTitle = $"{group_alias}User_Group.json";
+                    string FileTitleStatus = $"{group_alias}-group-sync-status.txt.";
+                    //Create content files
                     var stringInsideTheFile = $"{{\"B2BGroupSyncAlias\": \"{group_alias}\",\"groupAliasToUsersMapping\":{{ {resultUserList} }} }}";
+                    var statustext = "Ready";
 
+                    //Add content mapping file
                     CloudBlockBlob blob = container.GetBlockBlobReference(FileTitle);
 
                     blob.Properties.ContentType = "application/json";
@@ -138,6 +142,17 @@ namespace appsvc_fnc_dev_userssynch
                     {
                         LoadStreamWithJson(ms, stringInsideTheFile);
                         await blob.UploadFromStreamAsync(ms);
+                    }
+
+                    //Add status file
+                    CloudBlockBlob blobStatus = container.GetBlockBlobReference(FileTitleStatus);
+
+                    blob.Properties.ContentType = "application/json";
+
+                    using (var ms = new MemoryStream())
+                    {
+                        LoadStreamWithJson(ms, statustext);
+                        await blobStatus.UploadFromStreamAsync(ms);
                     }
 
                     await blob.SetPropertiesAsync();
