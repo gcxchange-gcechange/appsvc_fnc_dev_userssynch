@@ -66,96 +66,99 @@ namespace appsvc_fnc_dev_userssynch
                     string group_alias = item.group_alias;
                     string allgroupid = item.group_id;
 
-                    Auth auth = new Auth();
-                    var graphAPIAuth = auth.graphAuth(cliendID, rg_code, tenantid, log);
+                    //CreateFile Title
+                    string FileTitle = $"{group_alias}-b2b-sync-group-memberships.json";
+                    string FileTitleStatus = $"{group_alias}-group-sync-status.txt.";
 
-                    string stringUserList = "";
-
-                    //Get all group id
-                    var array_groupid = allgroupid.Split(",");
-                    foreach (var groupid in array_groupid)
-                    {
-                        List<User> users = new List<User>();
-                        var groupMembers = await graphAPIAuth.Groups[groupid.ToString()].Members.Request().Select("userType,mail").GetAsync();
-
-                        users.AddRange(groupMembers.CurrentPage.OfType<User>());
-                        // fetch next page
-                        while (groupMembers.NextPageRequest != null)
-                        {
-                            groupMembers = await groupMembers.NextPageRequest.GetAsync();
-                            users.AddRange(groupMembers.CurrentPage.OfType<User>());
-                        }
-
-                        //List of user
-                        List<string> userList = new List<string>();
-                        foreach (var user in users)
-                        {
-                            //check if user is a guest
-                            if(user.UserType != "Guest")
-                            {
-                                //get user domain
-                                string UserDomain = user.Mail.Split("@")[1];
-                                bool domainMatch = false;
-
-                                //check if domain part of the domain list
-                                foreach (var domain in domainsList)
-                                {
-                                    if (domain.UserDomains.Contains(UserDomain))
-                                    {
-                                        userList.Add(user.Mail);
-                                        domainMatch = true;
-                                    }
-                                }
-                                if (!domainMatch)
-                                {
-                                    log.LogError($"User domain do not exist {user.Mail}.");
-                                }
-                            }
-                            else
-                            {
-                                log.LogError($"User is a guest {user.Mail}.");
-                            }
-                        }
-                        var res = string.Join("\",\"", userList);
-                        stringUserList += $"\"{groupid.ToString()}\":[\"{res}\"],";
-                    }
                     //group object into json
-                    CreateContainerIfNotExists(log, containerName, storageAccount);
+                    // CreateContainerIfNotExists(log, containerName, storageAccount);
                     CloudBlobClient blobClient = storageAccount.CreateCloudBlobClient();
                     CloudBlobContainer container = blobClient.GetContainerReference(containerName);
-
-                    string resultUserList = stringUserList.Remove(stringUserList.Length - 1);
-
-                    //CreateFile Title
-                    string FileTitle = $"{group_alias}User_Group.json";
-                    string FileTitleStatus = $"{group_alias}-group-sync-status.txt.";
-                    //Create content files
-                    var stringInsideTheFile = $"{{\"B2BGroupSyncAlias\": \"{group_alias}\",\"groupAliasToUsersMapping\":{{ {resultUserList} }} }}";
-                    var statustext = "Ready";
 
                     //Add content mapping file
                     CloudBlockBlob blob = container.GetBlockBlobReference(FileTitle);
 
-                    blob.Properties.ContentType = "application/json";
-
-                    using (var ms = new MemoryStream())
+                    if (await blob.ExistsAsync() == false)
                     {
-                        LoadStreamWithJson(ms, stringInsideTheFile);
-                        await blob.UploadFromStreamAsync(ms);
+                        Auth auth = new Auth();
+                        var graphAPIAuth = auth.graphAuth(cliendID, rg_code, tenantid, log);
+
+                        string stringUserList = "";
+
+                        //Get all group id
+                        var array_groupid = allgroupid.Split(",");
+                        foreach (var groupid in array_groupid)
+                        {
+                            List<User> users = new List<User>();
+                            var groupMembers = await graphAPIAuth.Groups[groupid.ToString()].Members.Request().Select("userType,mail").GetAsync();
+                            users.AddRange(groupMembers.CurrentPage.OfType<User>());
+                            // fetch next page
+                            while (groupMembers.NextPageRequest != null)
+                            {
+                                groupMembers = await groupMembers.NextPageRequest.GetAsync();
+                                users.AddRange(groupMembers.CurrentPage.OfType<User>());
+                            }
+
+                            //List of user
+                            List<string> userList = new List<string>();
+                            foreach (var user in users)
+                            {
+                                //check if user is a guest
+                                if (user.UserType != "Guest" && user.Mail != null)
+                                {
+                                    //get user domain
+                                    string UserDomain = user.Mail.Split("@")[1];
+                                    bool domainMatch = false;
+
+                                    //check if domain part of the domain list
+                                    foreach (var domain in domainsList)
+                                    {
+                                        if (domain.UserDomains.Contains(UserDomain))
+                                        {
+                                            userList.Add(user.Mail);
+                                            domainMatch = true;
+                                        }
+                                    }
+                                    if (!domainMatch)
+                                    {
+                                        log.LogError($"User domain do not exist {user.Mail}.");
+                                    }
+                                }
+                                else
+                                {
+                                    log.LogError($"User is a guest or no email {user.DisplayName}.");
+                                }
+                            }
+                            var res = string.Join("\",\"", userList);
+                            stringUserList += $"\"{groupid.ToString()}\":[\"{res}\"],";
+                        }
+                        string resultUserList = stringUserList.Remove(stringUserList.Length - 1);
+
+                        //Create content files
+                        var stringInsideTheFile = $"{{\"B2BGroupSyncAlias\": \"{group_alias}\",\"groupAliasToUsersMapping\":{{ {resultUserList} }} }}";
+                        var statustext = "Ready";
+
+                        blob.Properties.ContentType = "application/json";
+
+                        using (var ms = new MemoryStream())
+                        {
+                            LoadStreamWithJson(ms, stringInsideTheFile);
+                            await blob.UploadFromStreamAsync(ms);
+                        }
+
+                        //Add status file
+                        CloudBlockBlob blobStatus = container.GetBlockBlobReference(FileTitleStatus);
+
+                        blob.Properties.ContentType = "application/json";
+
+                        using (var ms = new MemoryStream())
+                        {
+                            LoadStreamWithJson(ms, statustext);
+                            await blobStatus.UploadFromStreamAsync(ms);
+                        }
+
+                        await blob.SetPropertiesAsync();
                     }
-
-                    //Add status file
-                    CloudBlockBlob blobStatus = container.GetBlockBlobReference(FileTitleStatus);
-
-                    blob.Properties.ContentType = "application/json";
-
-                    using (var ms = new MemoryStream())
-                    {
-                        LoadStreamWithJson(ms, statustext);
-                        await blobStatus.UploadFromStreamAsync(ms);
-                    }
-
-                    await blob.SetPropertiesAsync();
                 }
                 token = queryResult.ContinuationToken;
             } while (token != null);

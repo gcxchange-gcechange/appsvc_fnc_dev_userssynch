@@ -25,7 +25,7 @@ namespace appsvc_fnc_dev_userssynch
             var scopes = new string[] { "https://graph.microsoft.com/.default" };
             var keyVaultUrl = config["keyVaultUrl"];
             var keyname = "dgcx-dev-key-userssynch-"+rg_code;
-            log.LogInformation($"{keyname}-{rg_code}");
+
             SecretClientOptions options = new SecretClientOptions()
             {
                 Retry =
@@ -39,8 +39,6 @@ namespace appsvc_fnc_dev_userssynch
             var client = new SecretClient(new Uri(keyVaultUrl), new DefaultAzureCredential(), options);
 
             KeyVaultSecret secret = client.GetSecret(keyname);
-
-
             IConfidentialClientApplication confidentialClientApplication = ConfidentialClientApplicationBuilder
             .Create(cliendID)
             .WithTenantId(tenantid)
