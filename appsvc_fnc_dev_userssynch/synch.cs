@@ -32,6 +32,8 @@ namespace appsvc_fnc_dev_userssynch
                 .AddEnvironmentVariables().Build();
 
             CloudStorageAccount storageAccount = CloudStorageAccount.Parse(config["AzureWebJobsStorage"]);
+            CloudStorageAccount storageAccountTBS = CloudStorageAccount.Parse(config["AzureWebJobsStorageTBS"]);
+
             string containerName = config["containerName"];
             string containerNameRef = config["containerNameRef"];
             string tableName = config["tableName"];
@@ -74,7 +76,7 @@ namespace appsvc_fnc_dev_userssynch
 
                     //group object into json
                     // CreateContainerIfNotExists(log, containerName, storageAccount);
-                    CloudBlobClient blobClient = storageAccount.CreateCloudBlobClient();
+                    CloudBlobClient blobClient = storageAccountTBS.CreateCloudBlobClient();
                     CloudBlobContainer container = blobClient.GetContainerReference(containerName);
 
                     //Add content mapping file
@@ -161,7 +163,6 @@ namespace appsvc_fnc_dev_userssynch
                             LoadStreamWithJson(ms, statustext);
                             await blobStatus.UploadFromStreamAsync(ms);
                         }
-
                         await blob.SetPropertiesAsync();
                     }
                 }
