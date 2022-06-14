@@ -64,7 +64,9 @@ namespace appsvc_fnc_dev_userssynch
                     string rg_code = item.rg_code;
                     string tenantid = item.tenant_id;
                     string group_alias = item.group_alias;
-                    string allgroupid = item.group_id;
+                    string allgroupid =  item.group_id;
+                    string allgroupname = item.group_name;
+
 
                     //CreateFile Title
                     string FileTitle = $"{group_alias}-b2b-sync-group-memberships.json";
@@ -87,6 +89,8 @@ namespace appsvc_fnc_dev_userssynch
 
                         //Get all group id
                         var array_groupid = allgroupid.Split(",");
+                        var array_groupname = allgroupname.Split(",");
+                        var positiongroupname = 0;
                         foreach (var groupid in array_groupid)
                         {
                             List<User> users = new List<User>();
@@ -130,7 +134,8 @@ namespace appsvc_fnc_dev_userssynch
                                 }
                             }
                             var res = string.Join("\",\"", userList);
-                            stringUserList += $"\"{groupid.ToString()}\":[\"{res}\"],";
+                            stringUserList += $"\"{array_groupname[positiongroupname]}\":[\"{res}\"],";
+                            positiongroupname++;
                         }
                         string resultUserList = stringUserList.Remove(stringUserList.Length - 1);
 

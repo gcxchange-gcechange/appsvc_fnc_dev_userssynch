@@ -26,6 +26,8 @@ namespace appsvc_fnc_dev_userssynch
         public string tenant_id { get; set; }
         public string group_alias { get; set; }
         public string group_id { get; set; }
+        public string group_name { get; set; }
+
     }
 
     public class UserDomainList
