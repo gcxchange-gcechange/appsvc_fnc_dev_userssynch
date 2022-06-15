@@ -14,6 +14,7 @@ using Microsoft.WindowsAzure.Storage.Blob;
 using Microsoft.Extensions.Configuration;
 using System.Linq;
 using Microsoft.WindowsAzure.Storage.Table;
+using Microsoft.WindowsAzure.Storage.Auth;
 
 namespace appsvc_fnc_dev_userssynch
 {
@@ -69,20 +70,20 @@ namespace appsvc_fnc_dev_userssynch
                     string allgroupid =  item.group_id;
                     string allgroupname = item.group_name;
 
-
                     //CreateFile Title
                     string FileTitle = $"{group_alias}-b2b-sync-group-memberships.json";
                     string FileTitleStatus = $"{group_alias}-group-sync-status.txt.";
 
-                    //group object into json
-                    // CreateContainerIfNotExists(log, containerName, storageAccount);
-                    CloudBlobClient blobClient = storageAccountTBS.CreateCloudBlobClient();
-                    CloudBlobContainer container = blobClient.GetContainerReference(containerName);
+                    string blobContainerName = containerName;
+                    BlobSas blobsas = new BlobSas();
+                    var storageAccountSas = blobsas.blobAuth(log);
 
-                    //Add content mapping file
-                    CloudBlockBlob blob = container.GetBlockBlobReference(FileTitle);
+                    CloudBlobClient blobClient = storageAccountSas.CreateCloudBlobClient();
+                    CloudBlobContainer blobContainer = blobClient.GetContainerReference(blobContainerName);
+                   
+                    CloudBlockBlob cloudBlob = blobContainer.GetBlockBlobReference(FileTitle);
 
-                    if (await blob.ExistsAsync() == false)
+                    if (await cloudBlob.ExistsAsync() == false)
                     {
                         Auth auth = new Auth();
                         var graphAPIAuth = auth.graphAuth(cliendID, rg_code, tenantid, log);
@@ -145,42 +146,30 @@ namespace appsvc_fnc_dev_userssynch
                         var stringInsideTheFile = $"{{\"B2BGroupSyncAlias\": \"{group_alias}\",\"groupAliasToUsersMapping\":{{ {resultUserList} }} }}";
                         var statustext = "Ready";
 
-                        blob.Properties.ContentType = "application/json";
+                        cloudBlob.Properties.ContentType = "application/json";
 
                         using (var ms = new MemoryStream())
                         {
                             LoadStreamWithJson(ms, stringInsideTheFile);
-                            await blob.UploadFromStreamAsync(ms);
+                            await cloudBlob.UploadFromStreamAsync(ms);
                         }
-
                         //Add status file
-                        CloudBlockBlob blobStatus = container.GetBlockBlobReference(FileTitleStatus);
+                        CloudBlockBlob blobStatus = blobContainer.GetBlockBlobReference(FileTitleStatus);
 
-                        blob.Properties.ContentType = "application/json";
+                        cloudBlob.Properties.ContentType = "application/json";
 
                         using (var ms = new MemoryStream())
                         {
                             LoadStreamWithJson(ms, statustext);
                             await blobStatus.UploadFromStreamAsync(ms);
                         }
-                        await blob.SetPropertiesAsync();
+                        await blobStatus.SetPropertiesAsync();
                     }
                 }
                 token = queryResult.ContinuationToken;
             } while (token != null);
 
             return new OkObjectResult(new { message = "Finished" });
-        }
-
-        private static async void CreateContainerIfNotExists(ILogger logger, string ContainerName, CloudStorageAccount storageAccount)
-        {
-            CloudBlobClient blobClient = storageAccount.CreateCloudBlobClient();
-            string[] containers = new string[] { ContainerName };
-            foreach (var item in containers)
-            {
-                CloudBlobContainer blobContainer = blobClient.GetContainerReference(item);
-                await blobContainer.CreateIfNotExistsAsync();
-            }
         }
 
         private static void LoadStreamWithJson(Stream ms, object obj)
