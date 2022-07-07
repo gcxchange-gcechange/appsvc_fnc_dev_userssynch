@@ -12,7 +12,7 @@ namespace appsvc_fnc_dev_userssynch
 {
     class Auth
     {
-        public GraphServiceClient graphAuth(string cliendID, string rg_code, string tenantid, ILogger log)
+        public GraphServiceClient graphAuth(string rg_code, string tenantid, ILogger log)
         {
 
             IConfiguration config = new ConfigurationBuilder()
@@ -24,7 +24,9 @@ namespace appsvc_fnc_dev_userssynch
             log.LogInformation("C# HTTP trigger function processed a request.");
             var scopes = new string[] { "https://graph.microsoft.com/.default" };
             var keyVaultUrl = config["keyVaultUrl"];
-            var keyname = "dgcx-dev-key-userssynch-"+rg_code;
+            var keynameSecret = "gcx-ops-key-userssync-secret"+rg_code;
+            var keynameClient = "gcx-ops-key-userssync-clientid"+rg_code;
+
 
             SecretClientOptions options = new SecretClientOptions()
             {
@@ -38,9 +40,11 @@ namespace appsvc_fnc_dev_userssynch
             };
             var client = new SecretClient(new Uri(keyVaultUrl), new DefaultAzureCredential(), options);
 
-            KeyVaultSecret secret = client.GetSecret(keyname);
+            KeyVaultSecret secret = client.GetSecret(keynameSecret);
+            KeyVaultSecret clientID = client.GetSecret(keynameClient);
+
             IConfidentialClientApplication confidentialClientApplication = ConfidentialClientApplicationBuilder
-            .Create(cliendID)
+            .Create(clientID.Value)
             .WithTenantId(tenantid)
             .WithClientSecret(secret.Value)
             .Build();

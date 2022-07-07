@@ -63,7 +63,7 @@ namespace appsvc_fnc_dev_userssynch
                 var queryResult = await table.ExecuteQuerySegmentedAsync(q, token);
                 foreach (var item in queryResult.Results)
                 {
-                    string cliendID = item.client_id;
+                   // string cliendID = item.client_id;
                     string rg_code = item.rg_code;
                     string tenantid = item.tenant_id;
                     string group_alias = item.group_alias;
@@ -75,18 +75,18 @@ namespace appsvc_fnc_dev_userssynch
                     string FileTitleStatus = $"{group_alias}-group-sync-status.txt.";
 
                     string blobContainerName = containerName;
-                    BlobSas blobsas = new BlobSas();
-                    var storageAccountSas = blobsas.blobAuth(log);
+                    //BlobSas blobsas = new BlobSas();
+                    //var storageAccountSas = blobsas.blobAuth(log);
 
-                    CloudBlobClient blobClient = storageAccountSas.CreateCloudBlobClient();
-                    CloudBlobContainer blobContainer = blobClient.GetContainerReference(blobContainerName);
+                   // CloudBlobClient blobClient = storageAccountSas.CreateCloudBlobClient();
+                    CloudBlobContainer blobContainer = serviceClient.GetContainerReference(blobContainerName);
                    
                     CloudBlockBlob cloudBlob = blobContainer.GetBlockBlobReference(FileTitle);
 
                     if (await cloudBlob.ExistsAsync() == false)
                     {
                         Auth auth = new Auth();
-                        var graphAPIAuth = auth.graphAuth(cliendID, rg_code, tenantid, log);
+                        var graphAPIAuth = auth.graphAuth(rg_code, tenantid, log);
 
                         string stringUserList = "";
 
