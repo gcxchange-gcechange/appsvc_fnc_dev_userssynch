@@ -15,6 +15,9 @@ using Microsoft.Extensions.Configuration;
 using System.Linq;
 using Microsoft.WindowsAzure.Storage.Table;
 using Microsoft.WindowsAzure.Storage.Auth;
+using Azure.Storage.Blobs;
+using Azure.Identity;
+using System.Text;
 
 namespace appsvc_fnc_dev_userssynch
 {
@@ -33,15 +36,15 @@ namespace appsvc_fnc_dev_userssynch
                 .AddEnvironmentVariables().Build();
 
             CloudStorageAccount storageAccount = CloudStorageAccount.Parse(config["AzureWebJobsStorage"]);
-            CloudStorageAccount storageAccountTBS = CloudStorageAccount.Parse(config["AzureWebJobsStorageTBS"]);
+           // CloudStorageAccount storageAccountTBS = CloudStorageAccount.Parse(config["AzureWebJobsStorageTBS"]);
 
             string containerName = config["containerName"];
+            string accountName = config["accountName"];
             string containerNameRef = config["containerNameRef"];
             string tableName = config["tableName"];
             string fileNameDomain = config["fileNameDomain"];
 
             CloudTableClient tableClient = storageAccount.CreateCloudTableClient();
-
             CloudTable table = tableClient.GetTableReference(tableName);
 
             TableContinuationToken token = null;
@@ -78,18 +81,28 @@ namespace appsvc_fnc_dev_userssynch
                     //BlobSas blobsas = new BlobSas();
                     //var storageAccountSas = blobsas.blobAuth(log);
 
-                    CloudBlobClient blobClient = storageAccountTBS.CreateCloudBlobClient();
-                    CloudBlobContainer blobContainer = blobClient.GetContainerReference(blobContainerName);
-                   
-                    CloudBlockBlob cloudBlob = blobContainer.GetBlockBlobReference(FileTitle);
+                    // Construct the blob container endpoint from the arguments.
+                    string containerEndpoint = string.Format("https://{0}.blob.core.windows.net/{1}",
+                                                                accountName,
+                                                                containerName);
 
-                    if (await cloudBlob.ExistsAsync() == false)
+                    // Get a credential and create a service client object for the blob container.
+                    BlobContainerClient containerClient = new BlobContainerClient(new Uri(containerEndpoint),
+                                                                                    new DefaultAzureCredential());
+
+
+                    // CloudBlobClient blobClient = storageAccountTBS.CreateCloudBlobClient();
+                    //  CloudBlobContainer blobContainer = blobClient.GetContainerReference(blobContainerName);
+
+                    var blobClient = containerClient.GetBlobClient(FileTitle);
+
+                    if (!blobClient.Exists())
                     {
+
                         Auth auth = new Auth();
                         var graphAPIAuth = auth.graphAuth(rg_code, tenantid, log);
 
                         string stringUserList = "";
-
                         //Get all group id
                         var array_groupid = allgroupid.Split(",");
                         var array_groupname = allgroupname.Split(",");
@@ -141,29 +154,42 @@ namespace appsvc_fnc_dev_userssynch
                             positiongroupname++;
                         }
                         string resultUserList = stringUserList.Remove(stringUserList.Length - 1);
-
                         //Create content files
                         var stringInsideTheFile = $"{{\"B2BGroupSyncAlias\": \"{group_alias}\",\"groupAliasToUsersMapping\":{{ {resultUserList} }} }}";
                         var statustext = "Ready";
 
-                        cloudBlob.Properties.ContentType = "application/json";
+                       // containerClient.Properties.ContentType = "application/json";
+                        // Upload text to a new block blob.
+                        byte[] byteArray = Encoding.ASCII.GetBytes(stringInsideTheFile);
 
-                        using (var ms = new MemoryStream())
+                        using (MemoryStream stream = new MemoryStream(byteArray))
                         {
-                            LoadStreamWithJson(ms, stringInsideTheFile);
-                            await cloudBlob.UploadFromStreamAsync(ms);
+                            await containerClient.UploadBlobAsync(FileTitle, stream);
                         }
+
+                        //using (var ms = new MemoryStream())
+                        //{
+                        //    LoadStreamWithJson(ms, stringInsideTheFile);
+                        //    await containerClient.UploadBlobAsync(ms);
+                        //}
                         //Add status file
-                        CloudBlockBlob blobStatus = blobContainer.GetBlockBlobReference(FileTitleStatus);
+                        //CloudBlockBlob blobStatus = blobContainer.GetBlockBlobReference(FileTitleStatus);
 
-                        cloudBlob.Properties.ContentType = "application/json";
+                        //cloudBlob.Properties.ContentType = "application/json";
 
-                        using (var ms = new MemoryStream())
+                        byte[] byteArrayStatus = Encoding.ASCII.GetBytes(statustext);
+
+                        using (MemoryStream stream = new MemoryStream(byteArrayStatus))
                         {
-                            LoadStreamWithJson(ms, statustext);
-                            await blobStatus.UploadFromStreamAsync(ms);
+                            await containerClient.UploadBlobAsync(FileTitleStatus, stream);
                         }
-                        await blobStatus.SetPropertiesAsync();
+
+                        //using (var ms = new MemoryStream())
+                        //{
+                        //    LoadStreamWithJson(ms, statustext);
+                        //    await blobStatus.UploadFromStreamAsync(ms);
+                        //}
+                        //await blobStatus.SetPropertiesAsync();
                     }
                 }
                 token = queryResult.ContinuationToken;
