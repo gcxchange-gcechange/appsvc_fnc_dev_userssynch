@@ -24,8 +24,8 @@ namespace appsvc_fnc_dev_userssynch
             log.LogInformation("C# HTTP trigger function processed a request.");
             var scopes = new string[] { "https://graph.microsoft.com/.default" };
             var keyVaultUrl = config["keyVaultUrl"];
-            var keynameSecret = "gcx-ops-key-userssync-secret"+rg_code;
-            var keynameClient = "gcx-ops-key-userssync-clientid"+rg_code;
+            var keynameSecret = "gcx-ops-key-userssync-secret-"+rg_code;
+            var keynameClient = "gcx-ops-key-userssync-clientid-"+rg_code;
 
 
             SecretClientOptions options = new SecretClientOptions()
