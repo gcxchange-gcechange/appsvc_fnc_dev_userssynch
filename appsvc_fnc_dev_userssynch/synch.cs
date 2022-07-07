@@ -79,7 +79,7 @@ namespace appsvc_fnc_dev_userssynch
                     //var storageAccountSas = blobsas.blobAuth(log);
 
                     CloudBlobClient blobClient = storageAccountTBS.CreateCloudBlobClient();
-                    CloudBlobContainer blobContainer = serviceClient.GetContainerReference(blobContainerName);
+                    CloudBlobContainer blobContainer = blobClient.GetContainerReference(blobContainerName);
                    
                     CloudBlockBlob cloudBlob = blobContainer.GetBlockBlobReference(FileTitle);
 
