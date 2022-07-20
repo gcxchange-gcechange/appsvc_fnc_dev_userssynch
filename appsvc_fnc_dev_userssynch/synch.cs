@@ -24,9 +24,7 @@ namespace appsvc_fnc_dev_userssynch
     public static class synch
     {
         [FunctionName("synch")]
-        public static async Task<IActionResult> Run(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "get", "post", Route = null)] HttpRequest req, ExecutionContext context,
-            ILogger log)
+            public static async Task<IActionResult> Run([TimerTrigger("0 0 * * * *")] TimerInfo myTimer, HttpRequest req, ExecutionContext context, ILogger log)
         {
             log.LogInformation("C# HTTP trigger function processed a request.");
 
