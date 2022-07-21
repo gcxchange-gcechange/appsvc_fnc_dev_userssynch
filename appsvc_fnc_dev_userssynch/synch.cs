@@ -24,7 +24,7 @@ namespace appsvc_fnc_dev_userssynch
     public static class synch
     {
         [FunctionName("synch")]
-            public static async Task<IActionResult> Run([TimerTrigger("0 0 * * * *")] TimerInfo myTimer, HttpRequest req, ExecutionContext context, ILogger log)
+            public static async Task Run([TimerTrigger("0 0 * * * *")] TimerInfo myTimer, HttpRequest req, ExecutionContext context, ILogger log)
         {
             log.LogInformation("C# HTTP trigger function processed a request.");
 
@@ -192,8 +192,6 @@ namespace appsvc_fnc_dev_userssynch
                 }
                 token = queryResult.ContinuationToken;
             } while (token != null);
-
-            return new OkObjectResult(new { message = "Finished" });
         }
 
         private static void LoadStreamWithJson(Stream ms, object obj)
