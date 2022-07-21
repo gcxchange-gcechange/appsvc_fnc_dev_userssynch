@@ -24,7 +24,7 @@ namespace appsvc_fnc_dev_userssynch
     public static class synch
     {
         [FunctionName("synch")]
-            public static async Task Run([TimerTrigger("0 0 * * * *")] TimerInfo myTimer, HttpRequest req, ExecutionContext context, ILogger log)
+            public static async Task Run([TimerTrigger("0 0 * * * *")] TimerInfo myTimer, ExecutionContext context, ILogger log)
         {
             log.LogInformation("C# HTTP trigger function processed a request.");
 
