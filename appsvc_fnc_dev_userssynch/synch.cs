@@ -24,7 +24,7 @@ namespace appsvc_fnc_dev_userssynch
     public static class synch
     {
         [FunctionName("synch")]
-            public static async Task Run([TimerTrigger(" 0 */60 * * * *")] TimerInfo myTimer, ExecutionContext context, ILogger log)
+            public static async Task Run([TimerTrigger(" 0 */10 * * * *")] TimerInfo myTimer, ExecutionContext context, ILogger log)
         {
             log.LogInformation("C# HTTP trigger function processed a request.");
 
@@ -123,6 +123,7 @@ namespace appsvc_fnc_dev_userssynch
                             List<string> userList = new List<string>();
                             foreach (var user in users)
                             {
+                                log.LogInformation(user.Mail);
                                 //check if user is a guest
                                 if (user.UserType != "Guest" && user.Mail != null)
                                 {
@@ -133,6 +134,7 @@ namespace appsvc_fnc_dev_userssynch
                                     //check if domain part of the domain list
                                     foreach (var domain in domainsList)
                                     {
+                                        log.LogInformation(domain.ToString());
                                         if (domain.UserDomains.Contains(UserDomain))
                                         {
                                             userList.Add(user.Mail);
