@@ -191,6 +191,10 @@ namespace appsvc_fnc_dev_userssynch
                         //}
                         //await blobStatus.SetPropertiesAsync();
                     }
+                    else
+                    {
+                        log.LogInformation("File already exist" + FileTitle);
+                    }
                 }
                 token = queryResult.ContinuationToken;
             } while (token != null);
