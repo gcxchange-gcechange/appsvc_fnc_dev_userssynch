@@ -24,7 +24,7 @@ namespace appsvc_fnc_dev_userssynch
     public static class synch
     {
         [FunctionName("synch")]
-            public static async Task Run([TimerTrigger(" 0 */60 * * * *")] TimerInfo myTimer, ExecutionContext context, ILogger log)
+            public static async Task Run([TimerTrigger(" 0 */10 * * * *")] TimerInfo myTimer, ExecutionContext context, ILogger log)
         {
             log.LogInformation("C# HTTP trigger function processed a request.");
 
@@ -75,9 +75,11 @@ namespace appsvc_fnc_dev_userssynch
                     string FileTitle = $"{group_alias}-b2b-sync-group-memberships.json";
                     string FileTitleStatus = $"{group_alias}-group-sync-status.txt.";
 
-                    string blobContainerName = containerName;
+                    //string blobContainerName = containerName;
                     //BlobSas blobsas = new BlobSas();
                     //var storageAccountSas = blobsas.blobAuth(log);
+
+                    string departcontainerName= group_alias.ToLower()+"-aad-to-gcx-b2b-sync-data";
 
                     // Construct the blob container endpoint from the arguments.
                     string containerEndpoint = string.Format("https://{0}.blob.core.windows.net/{1}",
