@@ -84,7 +84,7 @@ namespace appsvc_fnc_dev_userssynch
                     // Construct the blob container endpoint from the arguments.
                     string containerEndpoint = string.Format("https://{0}.blob.core.windows.net/{1}",
                                                                 accountName,
-                                                                containerName);
+                                                                departcontainerName);
 
                     // Get a credential and create a service client object for the blob container.
                     BlobContainerClient containerClient = new BlobContainerClient(new Uri(containerEndpoint),
