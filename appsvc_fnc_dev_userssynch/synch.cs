@@ -93,7 +93,6 @@ namespace appsvc_fnc_dev_userssynch
 
                     // CloudBlobClient blobClient = storageAccountTBS.CreateCloudBlobClient();
                     //  CloudBlobContainer blobContainer = blobClient.GetContainerReference(blobContainerName);
-                    log.LogInformation(containerEndpoint);
                     var blobClient = containerClient.GetBlobClient(FileTitle);
 
                     if (!blobClient.Exists())
@@ -194,7 +193,7 @@ namespace appsvc_fnc_dev_userssynch
                     }
                     else
                     {
-                        log.LogInformation("File already exist" + FileTitle);
+                        log.LogInformation("File already exist " + FileTitle);
                     }
                 }
                 token = queryResult.ContinuationToken;
