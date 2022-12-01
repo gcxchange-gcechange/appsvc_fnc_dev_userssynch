@@ -100,7 +100,7 @@ namespace appsvc_fnc_dev_userssynch
                     {
 
                         Auth auth = new Auth();
-                        var graphAPIAuth = auth.graphAuth(rg_code, tenantid, log);
+                        var graphAPIAuth = auth.graphAuth(group_alias, tenantid, log);
 
                         string stringUserList = "";
                         //Get all group id

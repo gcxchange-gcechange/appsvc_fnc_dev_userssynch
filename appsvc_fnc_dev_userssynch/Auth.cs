@@ -12,7 +12,7 @@ namespace appsvc_fnc_dev_userssynch
 {
     class Auth
     {
-        public GraphServiceClient graphAuth(string rg_code, string tenantid, ILogger log)
+        public GraphServiceClient graphAuth(string alias, string tenantid, ILogger log)
         {
 
             IConfiguration config = new ConfigurationBuilder()
@@ -24,8 +24,8 @@ namespace appsvc_fnc_dev_userssynch
             log.LogInformation("C# HTTP trigger function processed a request.");
             var scopes = new string[] { "https://graph.microsoft.com/.default" };
             var keyVaultUrl = config["keyVaultUrl"];
-            var keynameSecret = "gcx-ops-key-userssync-secret-"+rg_code;
-            var keynameClient = "gcx-ops-key-userssync-clientid-"+rg_code;
+            var keynameClient = alias.ToUpper()+"AppOnlyCredsClientId";
+            var keynameSecret = alias.ToUpper()+"AppOnlyCredsClientSecret";
 
 
             SecretClientOptions options = new SecretClientOptions()
