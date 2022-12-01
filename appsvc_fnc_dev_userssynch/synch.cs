@@ -24,7 +24,7 @@ namespace appsvc_fnc_dev_userssynch
     public static class synch
     {
         [FunctionName("synch")]
-            public static async Task Run([TimerTrigger(" 0 */10 * * * *")] TimerInfo myTimer, ExecutionContext context, ILogger log)
+            public static async Task Run([TimerTrigger(" 0 */60 * * * *")] TimerInfo myTimer, ExecutionContext context, ILogger log)
         {
             log.LogInformation("C# HTTP trigger function processed a request.");
 
@@ -93,7 +93,7 @@ namespace appsvc_fnc_dev_userssynch
 
                     // CloudBlobClient blobClient = storageAccountTBS.CreateCloudBlobClient();
                     //  CloudBlobContainer blobContainer = blobClient.GetContainerReference(blobContainerName);
-
+                    log.LogInformation(containerEndpoint);
                     var blobClient = containerClient.GetBlobClient(FileTitle);
 
                     if (!blobClient.Exists())
@@ -134,7 +134,6 @@ namespace appsvc_fnc_dev_userssynch
                                     //check if domain part of the domain list
                                     foreach (var domain in domainsList)
                                     {
-                                        log.LogInformation(domain.ToString());
                                         if (domain.UserDomains.Contains(UserDomain))
                                         {
                                             userList.Add(user.Mail);
