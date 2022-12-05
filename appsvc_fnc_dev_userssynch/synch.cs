@@ -109,7 +109,7 @@ namespace appsvc_fnc_dev_userssynch
                         foreach (var groupid in array_groupid)
                         {
                             List<User> users = new List<User>();
-                            var groupMembers = await graphAPIAuth.Groups[groupid.ToString()].Members.Request().Select("userType,mail").GetAsync();
+                            var groupMembers = await graphAPIAuth.Groups[groupid.ToString()].TransitiveMembers.Request().Select("userType,mail").GetAsync();
                             users.AddRange(groupMembers.CurrentPage.OfType<User>());
                             // fetch next page
                             while (groupMembers.NextPageRequest != null)
