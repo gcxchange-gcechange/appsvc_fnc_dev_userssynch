@@ -109,7 +109,7 @@ namespace appsvc_fnc_dev_userssynch
                         foreach (var groupid in array_groupid)
                         {
                             List<User> users = new List<User>();
-                            var groupMembers = await graphAPIAuth.Groups[groupid.ToString()].TransitiveMembers.Request().Select("userType,mail").GetAsync();
+                            var groupMembers = await graphAPIAuth.Groups[groupid.ToString()].TransitiveMembers.Request().Select("userType,mail,accountEnabled").GetAsync();
                             users.AddRange(groupMembers.CurrentPage.OfType<User>());
                             // fetch next page
                             while (groupMembers.NextPageRequest != null)
@@ -122,12 +122,13 @@ namespace appsvc_fnc_dev_userssynch
                             List<string> userList = new List<string>();
                             foreach (var user in users)
                             {
-                                log.LogInformation(user.Mail);
                                 //check if user is a guest
-                                if (user.UserType != "Guest" && user.Mail != null)
+                                if (user.UserType != "Guest" && user.Mail != null && user.AccountEnabled == true)
                                 {
+
                                     //get user domain
                                     string UserDomain = user.Mail.Split("@")[1];
+                                    log.LogInformation(UserDomain);
                                     bool domainMatch = false;
 
                                     //check if domain part of the domain list
@@ -146,7 +147,7 @@ namespace appsvc_fnc_dev_userssynch
                                 }
                                 else
                                 {
-                                    log.LogError($"User is a guest or no email {user.DisplayName}.");
+                                    log.LogError($"User is a guest, no email or disable {user.DisplayName}.");
                                 }
                             }
                             var res = string.Join("\",\"", userList);
