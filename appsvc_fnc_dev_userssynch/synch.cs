@@ -134,7 +134,7 @@ namespace appsvc_fnc_dev_userssynch
                                     //check if domain part of the domain list
                                     foreach (var domain in domainsList)
                                     {
-                                        if (domain.UserDomains.Contains(UserDomain))
+                                        if (domain.UserDomains.Contains(UserDomain.ToLower()))
                                         {
                                             userList.Add(user.Mail);
                                             domainMatch = true;
