@@ -117,11 +117,12 @@ namespace appsvc_fnc_dev_userssynch
                                 groupMembers = await groupMembers.NextPageRequest.GetAsync();
                                 users.AddRange(groupMembers.CurrentPage.OfType<User>());
                             }
-
+                            log.LogInformation("STart on " + groupid);
                             //List of user
                             List<string> userList = new List<string>();
                             foreach (var user in users)
                             {
+                                log.LogInformation("User: "+user.Mail);
                                 //check if user is a guest
                                 if (user.UserType != "Guest" && user.Mail != null && user.AccountEnabled == true)
                                 {
