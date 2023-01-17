@@ -19,6 +19,7 @@ using Azure.Storage.Blobs;
 using Azure.Identity;
 using System.Text;
 using Microsoft.Graph.ExternalConnectors;
+using System.Reflection.Metadata;
 
 
 // Hello! As you do some work on the sync, can you test something for me. Can you try running the function on a group that have multiple nested group.
@@ -30,6 +31,11 @@ namespace appsvc_fnc_dev_userssynch
 {
     public static class synch
     {
+        struct EmailNotificationList
+        {
+            public string[] EmailNotificationListForUsersThatCannotBeInvited { get; set; }
+        }
+
         struct UserAccount
         {
             public string DisplaName;
@@ -88,15 +94,11 @@ namespace appsvc_fnc_dev_userssynch
                         string allgroupid = item.group_id;
                         string allgroupname = item.group_name;
 
-                        // "EmailNotificationListForUsersThatCannotBeInvited": ["stephanie.lefebvre@tbs-sct.gc.ca","marco.saad@tbs-sct.gc.ca"],
-
-
                         //// TEMP - delete before check-in !!
                         //if (group_alias == "FCAC")
                         //{
                         //    continue;
                         //}
-
 
                         //CreateFile Title
                         string FileTitle = $"{group_alias}-b2b-sync-group-memberships.json";
@@ -156,6 +158,9 @@ namespace appsvc_fnc_dev_userssynch
                                 foreach (var user in users)
                                 {
                                     log.LogInformation("User: " + user.Mail);
+
+                                    reason = string.Empty;
+
                                     //check if user is a guest
                                     if (user.UserType != "Guest" && user.Mail != null && user.AccountEnabled == true)
                                     {
@@ -177,6 +182,7 @@ namespace appsvc_fnc_dev_userssynch
                                         if (!domainMatch)
                                         {
                                             log.LogError($"User domain does not exist {user.Mail}.");
+                                            reason = $"User domain does not exist {user.Mail}.";
                                         }
                                     }
                                     else
@@ -191,7 +197,10 @@ namespace appsvc_fnc_dev_userssynch
                                             reason = "User account is disabled";
                                         else
                                             reason = "Other";
+                                    }
 
+                                    if (reason != string.Empty)
+                                    {
                                         account = new UserAccount();
                                         account.DisplaName = user.DisplayName;
                                         account.EmailAddress = user.Mail;
@@ -199,6 +208,7 @@ namespace appsvc_fnc_dev_userssynch
                                         rejectedList.Add(account);
                                     }
                                 }
+
                                 var res = string.Join("\",\"", userList);
                                 stringUserList += $"\"{array_groupname[positiongroupname]}\":[\"{res}\"],";
                                 positiongroupname++;
@@ -242,9 +252,31 @@ namespace appsvc_fnc_dev_userssynch
                             //}
                             //await blobStatus.SetPropertiesAsync();
 
-
                             if (rejectedList.Count > 0)
-                                SendRejectedList(rejectedList, log);
+                            {
+                                // need to get email notification list here!
+                                // The list of email has to come from the storage account based on the department.
+                                // For example, TBS will be from: TBS-To-GCX-B2B-Sync.json, DFO from: DFO-To-GCX-B2B-Sync.json, etc.
+
+                                string notificationFileName = $"{group_alias}-To-GCX-B2B-Sync.json";
+                                BlobContainerClient blobContainerClient = new BlobContainerClient(new Uri(string.Format("https://{0}.blob.core.windows.net/{1}", accountName, "b2b-sync-config")), new DefaultAzureCredential());
+                                var bc = blobContainerClient.GetBlobClient(notificationFileName);
+
+                                if (bc.Exists())
+                                {
+                                    using (var stream = await bc.OpenReadAsync())
+                                    using (var sr = new StreamReader(stream))
+                                    using (var jr = new JsonTextReader(sr))
+                                    {
+                                        var result = JsonSerializer.CreateDefault().Deserialize<EmailNotificationList>(jr);
+                                        SendRejectedList(string.Join(",", result.EmailNotificationListForUsersThatCannotBeInvited), rejectedList, log);
+                                    }
+                                }
+                                else
+                                {
+                                    log.LogError($"File {notificationFileName} not found");
+                                }
+                            }
                         }
                         else
                         {
@@ -274,7 +306,7 @@ namespace appsvc_fnc_dev_userssynch
         }
 
 
-        private static void SendRejectedList(List<UserAccount> rejectedList, ILogger log)
+        private static void SendRejectedList(string emailNotificationList, List<UserAccount> rejectedList, ILogger log)
         {
             StringBuilder sb = new StringBuilder();
 
@@ -290,7 +322,7 @@ namespace appsvc_fnc_dev_userssynch
 
             sb.AppendLine($"</table>");
 
-            Email.SendEmail("GXChange User Synch Report", sb.ToString(), log);
+            Email.SendEmail(emailNotificationList, "GXChange User Synch Report", sb.ToString(), log);
         }
     }
 }

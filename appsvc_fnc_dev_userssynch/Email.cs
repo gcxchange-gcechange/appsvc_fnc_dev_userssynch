@@ -1,8 +1,6 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using Microsoft.Graph;
 using System;
-using System.Collections.Generic;
 using System.Net.Mail;
 using System.Net;
 using Azure.Identity;
@@ -12,16 +10,16 @@ namespace appsvc_fnc_dev_userssynch
 {
     internal class Email
     {
-        public static void SendEmail(string subject, string body, ILogger log)
+        public static void SendEmail(string emailNotificationList, string subject, string body, ILogger log)
         {
             IConfiguration config = new ConfigurationBuilder().AddJsonFile("appsettings.json", optional: true, reloadOnChange: true).AddEnvironmentVariables().Build();
 
-            string emailNotificationList = config["EmailNotificationListForUsersThatCannotBeInvited"];
             string hostName = config["hostName"];
             string port = config["port"];
             string senderEmail = config["senderEmail"];
 
-            try {
+            try
+            {
                 SecretClientOptions options = new SecretClientOptions()
                 {
                     Retry =
@@ -64,38 +62,36 @@ namespace appsvc_fnc_dev_userssynch
             }
         }
 
-        public static async void SendEmailGraph(string subject, string BodyContent, ILogger log)
-        {
-            IConfiguration config = new ConfigurationBuilder().AddJsonFile("appsettings.json", optional: true, reloadOnChange: true).AddEnvironmentVariables().Build();
+        //public static async void SendEmailGraph(string subject, string BodyContent, ILogger log)
+        //{
+        //    IConfiguration config = new ConfigurationBuilder().AddJsonFile("appsettings.json", optional: true, reloadOnChange: true).AddEnvironmentVariables().Build();
 
-            string EmailSender = config["userId"];
+        //    string EmailSender = config["userId"];
 
-            log.LogInformation($"EmailSender: {EmailSender}");
+        //    var scopes = new[] { "user.read mail.send" };
+        //    ROPCConfidentialTokenCredential auth = new ROPCConfidentialTokenCredential(log);
+        //    GraphServiceClient graphClient = new GraphServiceClient(auth, scopes);
 
-            var scopes = new[] { "user.read mail.send" };
-            ROPCConfidentialTokenCredential auth = new ROPCConfidentialTokenCredential(log);
-            GraphServiceClient graphClient = new GraphServiceClient(auth, scopes);
+        //    var msg = new Message
+        //    {
+        //        Subject = subject,
+        //        Body = new ItemBody
+        //        {
+        //            ContentType = BodyType.Html,
+        //            Content = BodyContent
+        //        },
+        //        ToRecipients = new List<Recipient>() { new Recipient { EmailAddress = new EmailAddress { Address = "oliver.postlethwaite@tbs-sct.gc.ca" } } }
+        //    };
 
-            var msg = new Message
-            {
-                Subject = subject,
-                Body = new ItemBody
-                {
-                    ContentType = BodyType.Html,
-                    Content = BodyContent
-                },
-                ToRecipients = new List<Recipient>() { new Recipient { EmailAddress = new EmailAddress { Address = "oliver.postlethwaite@tbs-sct.gc.ca" } } }
-            };
-
-            try
-            {
-                await graphClient.Users[EmailSender].SendMail(msg).Request().PostAsync();
-            }
-            catch (Exception e)
-            {
-                log.LogError($"Message: {e.Message}");
-                if (e.InnerException is not null) log.LogError($"InnerException: {e.InnerException.Message}");
-            }
-        }
+        //    try
+        //    {
+        //        await graphClient.Users[EmailSender].SendMail(msg).Request().PostAsync();
+        //    }
+        //    catch (Exception e)
+        //    {
+        //        log.LogError($"Message: {e.Message}");
+        //        if (e.InnerException is not null) log.LogError($"InnerException: {e.InnerException.Message}");
+        //    }
+        //}
     }
 }
