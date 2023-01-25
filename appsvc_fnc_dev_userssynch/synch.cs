@@ -106,7 +106,7 @@ namespace appsvc_fnc_dev_userssynch
                         //{
                         //    continue;
                         //}
-
+                        log.LogInformation("Start with"+group_alias);
                         //CreateFile Title
                         string FileTitle = $"{group_alias}-b2b-sync-group-memberships.json";
                         string FileTitleStatus = $"{group_alias}-group-sync-status.txt.";
@@ -164,7 +164,7 @@ namespace appsvc_fnc_dev_userssynch
 
                                 foreach (var user in users)
                                 {
-                                    log.LogInformation("User: " + user.Mail);
+                                    //log.LogInformation("User: " + user.Mail);
 
                                     reason = string.Empty;
 
@@ -174,7 +174,7 @@ namespace appsvc_fnc_dev_userssynch
 
                                         //get user domain
                                         string UserDomain = user.Mail.Split("@")[1];
-                                        log.LogInformation(UserDomain);
+                                        //log.LogInformation(UserDomain);
                                         bool domainMatch = false;
 
                                         //check if domain part of the domain list

@@ -17,6 +17,7 @@ namespace appsvc_fnc_dev_userssynch
             string hostName = config["hostName"];
             string port = config["port"];
             //string senderEmail = config["senderEmail"];
+            log.LogInformation("Send email");
 
             try
             {
