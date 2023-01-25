@@ -298,6 +298,7 @@ namespace appsvc_fnc_dev_userssynch
                                     using (var jr = new JsonTextReader(sr))
                                     {
                                         var result = JsonSerializer.CreateDefault().Deserialize<EmailNotificationList>(jr);
+                                        log.LogInformation(string.Join(",", result.EmailNotificationListForUsersThatCannotBeInvited));
                                         SendRejectedList(string.Join(",", result.EmailNotificationListForUsersThatCannotBeInvited), rejectedList, log);
                                     }
                                 }
