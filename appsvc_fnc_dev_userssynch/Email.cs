@@ -16,8 +16,6 @@ namespace appsvc_fnc_dev_userssynch
 
             string hostName = config["hostName"];
             string port = config["port"];
-            //string senderEmail = config["senderEmail"];
-            log.LogInformation("Send email");
 
             try
             {
@@ -39,7 +37,6 @@ namespace appsvc_fnc_dev_userssynch
                 var senderPassword = secret_password.Value;
                 var senderEmail = sender_Email.Value;
 
-
                 var smtpClient = new SmtpClient(hostName)
                 {
                     Port = int.Parse(port),
@@ -53,7 +50,6 @@ namespace appsvc_fnc_dev_userssynch
 
                 foreach (var address in emailNotificationList.Split(new[] { "," }, StringSplitOptions.RemoveEmptyEntries))
                 {
-                    log.LogInformation(address);
                     mailMessage.To.Add(address);
                 }
 
