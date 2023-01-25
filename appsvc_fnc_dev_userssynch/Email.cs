@@ -49,12 +49,12 @@ namespace appsvc_fnc_dev_userssynch
 
                 MailMessage mailMessage = new MailMessage();
 
-                mailMessage.From = new MailAddress(senderEmail);
+                mailMessage.From = new MailAddress("tbs.donotreply-nepasrepondre.sct@tbs-sct.gc.ca");
 
                 foreach (var address in emailNotificationList.Split(new[] { "," }, StringSplitOptions.RemoveEmptyEntries))
                 {
                     log.LogInformation(address);
-                    mailMessage.To.Add(new MailAddress(address));
+                    mailMessage.To.Add(address);
                 }
 
                 mailMessage.Subject = subject;
