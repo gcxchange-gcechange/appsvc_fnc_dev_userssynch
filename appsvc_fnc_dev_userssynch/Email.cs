@@ -54,7 +54,7 @@ namespace appsvc_fnc_dev_userssynch
                 foreach (var address in emailNotificationList.Split(new[] { "," }, StringSplitOptions.RemoveEmptyEntries))
                 {
                     log.LogInformation(address);
-                    mailMessage.To.Add(address);
+                    mailMessage.To.Add(new MailAddress(address));
                 }
 
                 mailMessage.Subject = subject;
