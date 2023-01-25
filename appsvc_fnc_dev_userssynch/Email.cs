@@ -47,7 +47,7 @@ namespace appsvc_fnc_dev_userssynch
                     EnableSsl = true,
                 };
 
-                MailMessage mailMessage = new MailMessage();
+                MailMessage mailMessage = new MailMessage() { IsBodyHtml = true };
 
                 mailMessage.From = new MailAddress("tbs.donotreply-nepasrepondre.sct@tbs-sct.gc.ca");
 
