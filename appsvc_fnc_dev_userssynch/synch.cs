@@ -262,27 +262,27 @@ namespace appsvc_fnc_dev_userssynch
                             if (rejectedList.Count > 0)
                             {
 
-                                string SMTPInfoFileName = "general-config.json";
-                                BlobContainerClient blobContainerClientSMTP = new BlobContainerClient(new Uri(string.Format("https://{0}.blob.core.windows.net/{1}", accountName, "sync-bootstrap-config-v4")), new DefaultAzureCredential());
-                                var bcSMTP = blobContainerClientSMTP.GetBlobClient(SMTPInfoFileName);
+                                //string SMTPInfoFileName = "general-config.json";
+                                //BlobContainerClient blobContainerClientSMTP = new BlobContainerClient(new Uri(string.Format("https://{0}.blob.core.windows.net/{1}", accountName, "sync-bootstrap-config-v4")), new DefaultAzureCredential());
+                                //var bcSMTP = blobContainerClientSMTP.GetBlobClient(SMTPInfoFileName);
 
-                                if (bcSMTP.Exists())
-                                {
-                                    using (var streamSMTP = await bcSMTP.OpenReadAsync())
-                                    using (var srSMTP = new StreamReader(streamSMTP))
-                                    using (var jrSMTP = new JsonTextReader(srSMTP))
-                                    {
-                                        var result = JsonSerializer.CreateDefault().Deserialize<SMTPInfo>(jrSMTP);
-                                        var smtpPort = result.SMTPPort;
-                                        var smtpServer = result.SMTPServerFQDN;
+                                //if (bcSMTP.Exists())
+                                //{
+                                //    using (var streamSMTP = await bcSMTP.OpenReadAsync())
+                                //    using (var srSMTP = new StreamReader(streamSMTP))
+                                //    using (var jrSMTP = new JsonTextReader(srSMTP))
+                                //    {
+                                //        var result = JsonSerializer.CreateDefault().Deserialize<SMTPInfo>(jrSMTP);
+                                //        var smtpPort = result.SMTPPort;
+                                //        var smtpServer = result.SMTPServerFQDN;
 
-                                        // SendRejectedList(string.Join(",", result.EmailNotificationListForUsersThatCannotBeInvited), rejectedList, log);
-                                    }
-                                }
-                                else
-                                {
-                                    log.LogError($"File {SMTPInfoFileName} not found");
-                                }
+                                //        // SendRejectedList(string.Join(",", result.EmailNotificationListForUsersThatCannotBeInvited), rejectedList, log);
+                                //    }
+                                //}
+                                //else
+                                //{
+                                //    log.LogError($"File {SMTPInfoFileName} not found");
+                                //}
                                 // need to get email notification list here!
                                 // The list of email has to come from the storage account based on the department.
                                 // For example, TBS will be from: TBS-To-GCX-B2B-Sync.json, DFO from: DFO-To-GCX-B2B-Sync.json, etc.
