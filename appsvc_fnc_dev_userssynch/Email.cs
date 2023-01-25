@@ -16,7 +16,7 @@ namespace appsvc_fnc_dev_userssynch
 
             string hostName = config["hostName"];
             string port = config["port"];
-            string senderEmail = config["senderEmail"];
+            //string senderEmail = config["senderEmail"];
 
             try
             {
@@ -33,7 +33,11 @@ namespace appsvc_fnc_dev_userssynch
 
                 var client = new SecretClient(new System.Uri(config["keyVaultUrl"]), new DefaultAzureCredential(), options);
                 KeyVaultSecret secret_password = client.GetSecret(config["secretNamePassword"]);
+                KeyVaultSecret sender_Email = client.GetSecret(config["senderEmail"]);
+
                 var senderPassword = secret_password.Value;
+                var senderEmail = sender_Email.Value;
+
 
                 var smtpClient = new SmtpClient(hostName)
                 {
