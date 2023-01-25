@@ -342,7 +342,7 @@ namespace appsvc_fnc_dev_userssynch
 
             sb.AppendLine("<p>The following user's were not included in the synch:</p>");
 
-            sb.AppendLine($"<table border='1' width='100%'>");
+            sb.AppendLine($"<table border=\"1\" width='100%'>");
             sb.AppendLine($"<tr><td style='font-weight: bold'>Name</td><td style='font-weight: bold'>Email Address</td><td style='font-weight: bold'>Reason for rejection</td></tr>");
 
             foreach (var account in rejectedList)
