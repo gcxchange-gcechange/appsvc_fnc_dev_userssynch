@@ -299,7 +299,7 @@ namespace appsvc_fnc_dev_userssynch
                                     {
                                         var result = JsonSerializer.CreateDefault().Deserialize<EmailNotificationList>(jr);
                                         log.LogInformation(string.Join(",", result.EmailNotificationListForUsersThatCannotBeInvited));
-                                        SendRejectedList(string.Join(",", result.EmailNotificationListForUsersThatCannotBeInvited), rejectedList, log);
+                                        SendRejectedList(string.Join(",", result.EmailNotificationListForUsersThatCannotBeInvited), rejectedList, group_alias, log);
                                     }
                                 }
                                 else
@@ -336,7 +336,7 @@ namespace appsvc_fnc_dev_userssynch
         }
 
 
-        private static void SendRejectedList(string emailNotificationList, List<UserAccount> rejectedList, ILogger log)
+        private static void SendRejectedList(string emailNotificationList, List<UserAccount> rejectedList, string group_alias, ILogger log)
         {
             StringBuilder sb = new StringBuilder();
 
@@ -352,7 +352,7 @@ namespace appsvc_fnc_dev_userssynch
 
             sb.AppendLine($"</table>");
 
-            Email.SendEmail(emailNotificationList, "GXChange User Synch Report", sb.ToString(), log);
+            Email.SendEmail(emailNotificationList, "["+ group_alias.ToUpper() +"] GXChange User Synch Report", sb.ToString(), log);
         }
     }
 }
