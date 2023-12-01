@@ -1,10 +1,7 @@
 using System;
 using System.IO;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.WebJobs;
-using Microsoft.Azure.WebJobs.Extensions.Http;
-using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using Microsoft.Graph;
@@ -14,18 +11,9 @@ using Microsoft.WindowsAzure.Storage.Blob;
 using Microsoft.Extensions.Configuration;
 using System.Linq;
 using Microsoft.WindowsAzure.Storage.Table;
-using Microsoft.WindowsAzure.Storage.Auth;
 using Azure.Storage.Blobs;
 using Azure.Identity;
 using System.Text;
-using Microsoft.Graph.ExternalConnectors;
-using System.Reflection.Metadata;
-
-
-// Hello! As you do some work on the sync, can you test something for me. Can you try running the function on a group that have multiple nested group.
-// What I mean by that is having a group with multiple level of group. (A group, in a group, in a group, etc.)
-
-
 
 namespace appsvc_fnc_dev_userssynch
 {
