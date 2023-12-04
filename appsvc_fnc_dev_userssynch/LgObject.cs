@@ -35,13 +35,17 @@ namespace appsvc_fnc_dev_userssynch
         public string Alias { get; set; }
         public string EnglishName { get; set; }
         public string FrenchName { get; set; }
-        public string[] UserDomains { get; set; }
         public string AADOrgDomain { get; set; }
         public string AppOnlyServicePrincipalClientIdKeyVaultSecretName { get; set; }
         public string AppOnlyServicePrincipalClientSecretKeyVaultSecretName { get; set; }
         public string AppOnlyServicePrincipalClientIdAutomationAccountCredentialName { get; set; }
         public string AppOnlyServicePrincipalClientSecretAutomationAccountCredentialName { get; set; }
 
+        private string[] _UserDomains;
+        public string[] UserDomains
+        {
+            get { return _UserDomains; }
+            set { _UserDomains = value.Select(s => s.ToLowerInvariant()).ToArray(); }
+        }
     }
-
 }
