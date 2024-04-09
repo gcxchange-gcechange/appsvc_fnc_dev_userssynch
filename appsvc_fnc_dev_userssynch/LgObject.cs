@@ -1,9 +1,5 @@
 using Microsoft.WindowsAzure.Storage.Table;
-using System;
-using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace appsvc_fnc_dev_userssynch
 {
@@ -47,5 +43,17 @@ namespace appsvc_fnc_dev_userssynch
             get { return _UserDomains; }
             set { _UserDomains = value.Select(s => s.ToLowerInvariant()).ToArray(); }
         }
+    }
+
+    struct EmailNotificationList
+    {
+        public string[] EmailNotificationListForUsersThatCannotBeInvited { get; set; }
+    }
+
+    struct UserAccount
+    {
+        public string DisplaName;
+        public string EmailAddress;
+        public string ReasonForRejection;
     }
 }

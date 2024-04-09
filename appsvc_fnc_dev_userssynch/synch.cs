@@ -19,109 +19,73 @@ namespace appsvc_fnc_dev_userssynch
 {
     public static class synch
     {
-        struct EmailNotificationList
-        {
-            public string[] EmailNotificationListForUsersThatCannotBeInvited { get; set; }
-        }
-
-        struct UserAccount
-        {
-            public string DisplaName;
-            public string EmailAddress;
-            public string ReasonForRejection;
-        }
-
-        struct SMTPInfo
-        {
-            public string SMTPPort { get; set; }
-            public string SMTPServerFQDN { get; set; }
-
-        }
-
+        // Run every hour
         [FunctionName("synch")]
-            public static async Task Run([TimerTrigger(" 0 */60 * * * *")] TimerInfo myTimer, ExecutionContext context, ILogger log)
+        public static async Task Run([TimerTrigger(" 0 */60 * * * *")] TimerInfo myTimer, ExecutionContext context, ILogger log)
         {
             log.LogInformation("C# HTTP trigger function processed a request.");
 
-
             try {
+                var config = new ConfigurationBuilder().SetBasePath(context.FunctionAppDirectory).AddJsonFile("local.settings.json", true, true).AddEnvironmentVariables().Build();
 
-                var config = new ConfigurationBuilder()
-                    .SetBasePath(context.FunctionAppDirectory)
-                    .AddJsonFile("local.settings.json", true, true)
-                    .AddEnvironmentVariables().Build();
+                string accountName = config["accountName"];           // stsyncostdps
+                string containerNameRef = config["containerNameRef"]; // reference
+                string tableName = config["tableName"];               // UserSyncRef
+                string fileNameDomain = config["fileNameDomain"];     // domain-config.json
 
-                CloudStorageAccount storageAccount = CloudStorageAccount.Parse(config["AzureWebJobsStorage"]);
-                // CloudStorageAccount storageAccountTBS = CloudStorageAccount.Parse(config["AzureWebJobsStorageTBS"]);
-
-                string containerName = config["containerName"];
-                string accountName = config["accountName"];
-                string containerNameRef = config["containerNameRef"];
-                string tableName = config["tableName"];
-                string fileNameDomain = config["fileNameDomain"];
+                CloudStorageAccount storageAccount = CloudStorageAccount.Parse(config["AzureWebJobsStorage"]);  // AccountName=stsynchdevstd
 
                 CloudTableClient tableClient = storageAccount.CreateCloudTableClient();
                 CloudTable table = tableClient.GetTableReference(tableName);
-
                 TableContinuationToken token = null;
+
                 do
                 {
-                    //get domain config file
+                    // Get domain config file
+                    
                     // Connect to the blob storage
                     CloudBlobClient serviceClient = storageAccount.CreateCloudBlobClient();
+                    
                     // Connect to the blob container
-                    CloudBlobContainer containerRef = serviceClient.GetContainerReference($"{containerNameRef}");
+                    CloudBlobContainer containerRef = serviceClient.GetContainerReference($"{containerNameRef}");   
+
                     // Connect to the blob file
                     CloudBlockBlob blobRef = containerRef.GetBlockBlobReference($"{fileNameDomain}");
+
                     // Get the blob file as text
                     string contents = blobRef.DownloadTextAsync().Result;
-                    // var domainsList = JsonConvert.SerializeObject(contents);
+
                     var domainsList = JsonConvert.DeserializeObject<List<UserDomainList>>(contents);
 
                     var q = new TableQuery<Table_Ref>();
                     var queryResult = await table.ExecuteQuerySegmentedAsync(q, token);
+
                     foreach (var item in queryResult.Results)
                     {
-                        // string cliendID = item.client_id;
+                        // Note: client_id is not taken from the table data, it is taken from the keyvault
                         string rg_code = item.rg_code;
                         string tenantid = item.tenant_id;
                         string group_alias = item.group_alias;
                         string allgroupid = item.group_id;
                         string allgroupname = item.group_name;
 
-                        //// TEMP - delete before check-in !!
-                        //if (group_alias == "FCAC")
-                        //{
-                        //    continue;
-                        //}
-                        log.LogInformation("Start with "+group_alias);
-                        //CreateFile Title
+                        log.LogInformation($"Start with {group_alias}");
+
+                        // Create File Title
                         string FileTitle = $"{group_alias}-b2b-sync-group-memberships.json";
                         string FileTitleStatus = $"{group_alias}-group-sync-status.txt.";
-
-                        //string blobContainerName = containerName;
-                        //BlobSas blobsas = new BlobSas();
-                        //var storageAccountSas = blobsas.blobAuth(log);
-
-                        string departcontainerName = group_alias.ToLower() + "-aad-to-gcx-b2b-sync-data";
+                        string departcontainerName = $"{group_alias.ToLower()}-aad-to-gcx-b2b-sync-data";
 
                         // Construct the blob container endpoint from the arguments.
-                        string containerEndpoint = string.Format("https://{0}.blob.core.windows.net/{1}",
-                                                                    accountName,
-                                                                    departcontainerName);
+                        string containerEndpoint = string.Format("https://{0}.blob.core.windows.net/{1}", accountName, departcontainerName);
 
                         // Get a credential and create a service client object for the blob container.
-                        BlobContainerClient containerClient = new BlobContainerClient(new Uri(containerEndpoint),
-                                                                                        new DefaultAzureCredential());
+                        BlobContainerClient containerClient = new BlobContainerClient(new Uri(containerEndpoint), new DefaultAzureCredential());
 
-
-                        // CloudBlobClient blobClient = storageAccountTBS.CreateCloudBlobClient();
-                        //  CloudBlobContainer blobContainer = blobClient.GetContainerReference(blobContainerName);
                         var blobClient = containerClient.GetBlobClient(FileTitle);
 
                         if (!blobClient.Exists())
                         {
-
                             Auth auth = new Auth();
                             var graphAPIAuth = auth.graphAuth(group_alias, tenantid, log);
 
@@ -135,17 +99,22 @@ namespace appsvc_fnc_dev_userssynch
                             foreach (var groupid in array_groupid)
                             {
                                 List<User> users = new List<User>();
-                                var groupMembers = await graphAPIAuth.Groups[groupid.ToString()].TransitiveMembers.Request().Select("userType,mail,accountEnabled,displayName").GetAsync();
+
+                                var group = await graphAPIAuth.Groups[groupid.ToString()].Request().GetAsync();
+                                log.LogInformation($"groups: {group.Id}");
+
+                                var groupMembers = await graphAPIAuth.Groups[groupid.ToString()].TransitiveMembers.Request().Select("userType,mail,accountEnabled,displayName,id").GetAsync();
                                 users.AddRange(groupMembers.CurrentPage.OfType<User>());
+
                                 // fetch next page
                                 while (groupMembers.NextPageRequest != null)
                                 {
                                     groupMembers = await groupMembers.NextPageRequest.GetAsync();
                                     users.AddRange(groupMembers.CurrentPage.OfType<User>());
                                 }
-                                log.LogInformation("STart on " + groupid);
+                                log.LogInformation("Start on group " + groupid);
 
-                                //List of user
+                                // List of user
                                 List<string> userList = new List<string>();
                                 string reason = string.Empty;
                                 UserAccount account;
@@ -154,15 +123,15 @@ namespace appsvc_fnc_dev_userssynch
                                 {
                                     reason = string.Empty;
 
-                                    //check if user is a guest
+                                    // check if user is a guest
                                     if (user.UserType != "Guest" && user.Mail != null && user.AccountEnabled == true)
                                     {
 
-                                        //get user domain
+                                        // get user domain
                                         string UserDomain = user.Mail.Split("@")[1];
                                         bool domainMatch = false;
 
-                                        //check if domain part of the domain list
+                                        // check if domain part of the domain list
                                         foreach (var domain in domainsList)
                                         {
                                             if (domain.UserDomains.Contains(UserDomain.ToLower()))
@@ -179,8 +148,6 @@ namespace appsvc_fnc_dev_userssynch
                                     }
                                     else
                                     {
-                                        log.LogError($"User is a guest, no email or disable {user.DisplayName}.");
-
                                         if (user.UserType == "Guest")
                                             reason = "User is a guest";
                                         else if (user.Mail == null)
@@ -189,6 +156,8 @@ namespace appsvc_fnc_dev_userssynch
                                             reason = "User account is disabled";
                                         else
                                             reason = "Other";
+
+                                        log.LogWarning($"User is a guest, no email or disable {user.DisplayName} - {user.Id}. Reason: {reason}");
                                     }
 
                                     if (reason != string.Empty)
@@ -200,18 +169,16 @@ namespace appsvc_fnc_dev_userssynch
                                         rejectedList.Add(account);
                                     }
                                 }
-
                                 var res = string.Join("\",\"", userList);
                                 stringUserList += $"\"{array_groupname[positiongroupname]}\":[\"{res}\"],";
                                 positiongroupname++;
                             }
 
                             string resultUserList = stringUserList.Remove(stringUserList.Length - 1);
-                            //Create content files
+                            // Create content files
                             var stringInsideTheFile = $"{{\"B2BGroupSyncAlias\": \"{group_alias}\",\"groupAliasToUsersMapping\":{{ {resultUserList} }} }}";
                             var statustext = "Ready";
 
-                            // containerClient.Properties.ContentType = "application/json";
                             // Upload text to a new block blob.
                             byte[] byteArray = Encoding.ASCII.GetBytes(stringInsideTheFile);
 
@@ -220,29 +187,12 @@ namespace appsvc_fnc_dev_userssynch
                                 await containerClient.UploadBlobAsync(FileTitle, stream);
                             }
 
-                            //using (var ms = new MemoryStream())
-                            //{
-                            //    LoadStreamWithJson(ms, stringInsideTheFile);
-                            //    await containerClient.UploadBlobAsync(ms);
-                            //}
-                            //Add status file
-                            //CloudBlockBlob blobStatus = blobContainer.GetBlockBlobReference(FileTitleStatus);
-
-                            //cloudBlob.Properties.ContentType = "application/json";
-
                             byte[] byteArrayStatus = Encoding.ASCII.GetBytes(statustext);
 
                             using (MemoryStream stream = new MemoryStream(byteArrayStatus))
                             {
                                 await containerClient.UploadBlobAsync(FileTitleStatus, stream);
                             }
-
-                            //using (var ms = new MemoryStream())
-                            //{
-                            //    LoadStreamWithJson(ms, statustext);
-                            //    await blobStatus.UploadFromStreamAsync(ms);
-                            //}
-                            //await blobStatus.SetPropertiesAsync();
 
                             if (rejectedList.Count > 0)
                             {
@@ -257,7 +207,7 @@ namespace appsvc_fnc_dev_userssynch
                                     using (var jr = new JsonTextReader(sr))
                                     {
                                         var result = JsonSerializer.CreateDefault().Deserialize<EmailNotificationList>(jr);
-                                        log.LogInformation(string.Join(",", result.EmailNotificationListForUsersThatCannotBeInvited));
+                                        log.LogInformation($"EmailNotificationList: {string.Join(",", result.EmailNotificationListForUsersThatCannotBeInvited)}");
                                         SendRejectedList(string.Join(",", result.EmailNotificationListForUsersThatCannotBeInvited), rejectedList, group_alias, log);
                                     }
                                 }
@@ -274,8 +224,6 @@ namespace appsvc_fnc_dev_userssynch
                     }
                     token = queryResult.ContinuationToken;
                 } while (token != null);
-
-
             }
             catch (Exception e) {
 
@@ -285,15 +233,6 @@ namespace appsvc_fnc_dev_userssynch
 
             }
         }
-
-        private static void LoadStreamWithJson(Stream ms, object obj)
-        {
-            StreamWriter writer = new StreamWriter(ms);
-            writer.Write(obj);
-            writer.Flush();
-            ms.Position = 0;
-        }
-
 
         private static void SendRejectedList(string emailNotificationList, List<UserAccount> rejectedList, string group_alias, ILogger log)
         {
