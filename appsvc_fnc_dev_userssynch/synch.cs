@@ -14,6 +14,7 @@ using Microsoft.WindowsAzure.Storage.Table;
 using Azure.Storage.Blobs;
 using Azure.Identity;
 using System.Text;
+using Microsoft.AspNetCore.Mvc;
 
 namespace appsvc_fnc_dev_userssynch
 {
@@ -60,6 +61,8 @@ namespace appsvc_fnc_dev_userssynch
                     var q = new TableQuery<Table_Ref>();
                     var queryResult = await table.ExecuteQuerySegmentedAsync(q, token);
 
+                    List<string> authFailureList = new();
+
                     foreach (var item in queryResult.Results)
                     {
                         // Note: client_id is not taken from the table data, it is taken from the keyvault
@@ -86,8 +89,17 @@ namespace appsvc_fnc_dev_userssynch
 
                         if (!blobClient.Exists())
                         {
-                            Auth auth = new Auth();
-                            var graphAPIAuth = auth.graphAuth(group_alias, tenantid, log);
+                            GraphServiceClient graphAPIAuth;
+
+                            try {
+                                Auth auth = new Auth();
+                                graphAPIAuth = auth.graphAuth(group_alias, tenantid, log);
+                            }
+                            catch {
+                                log.LogError($"Authentication failure for group_alias: {group_alias}");
+                                authFailureList.Add(group_alias);
+                                continue;
+                            }
 
                             string stringUserList = "";
                             //Get all group id
@@ -222,6 +234,12 @@ namespace appsvc_fnc_dev_userssynch
                             log.LogInformation("File already exist " + FileTitle);
                         }
                     }
+                    
+                    if (authFailureList.Count > 0)
+                    {
+                        SendAuthFailureList(config["authFailureNotificationList"], authFailureList, log);
+                    }
+
                     token = queryResult.ContinuationToken;
                 } while (token != null);
             }
@@ -251,6 +269,24 @@ namespace appsvc_fnc_dev_userssynch
             sb.AppendLine($"</table>");
 
             Email.SendEmail(emailNotificationList, "["+ group_alias.ToUpper() +"] GXChange User Synch Report", sb.ToString(), log);
+        }
+
+        private static void SendAuthFailureList(string emailNotificationList, List<string> failureList, ILogger log)
+        {
+            StringBuilder sb = new StringBuilder();
+
+            sb.AppendLine("<p>The following groups reported an authentication failure during the synch:</p>");
+
+            sb.AppendLine($"<ul>");
+
+            foreach (var group_alias in failureList)
+            {
+                sb.AppendLine($"<li>{group_alias}</li>");
+            }
+
+            sb.AppendLine($"</ul>");
+
+            Email.SendEmail(emailNotificationList, "GXChange User Synch Authentication Failure Report", sb.ToString(), log);
         }
     }
 }
