@@ -1,21 +1,26 @@
 trigger:
-  branches:
-    include:
-    - '*'
+- master
 
-pool:
-  name: TBS Linux Self Hosted
+resources:
+  repositories:
+  - repository: 'appsvc_fnc_dev_userssynch'
+    type: git
+    name: 'GCExchange/appsvc_fnc_dev_userssynch'
+pool: TBS Linux Self Hosted
+jobs:
+  - job: sync
+    uses:
+     repositories:
+       - 'appsvc_fnc_dev_userssynch'
+    steps:
+    - script: |
+        echo Sync azure repo
+        git clone --bare https://tbs-sct:$(System.AccessToken)@dev.azure.com/tbs-sct/GCExchange/_git/$REPO_NAME Sync_directory
+        cd Sync_directory
+        git remote add --mirror=fetch upstream https://github.com/gcxchange-gcechange/$REPO_NAME
+        git fetch upstream --tags
+        git push origin --all
+      env:
+        REPO_NAME: "appsvc_fnc_dev_userssynch"
+      displayName: 'Sync repo'
 
-steps:
-- script: |
-    echo Sync azure repo
-    B64_PAT=$(echo -n ":$PAT" | base64)
-    git -c http.extraHeader="Authorization: Basic ${B64_PAT}" clone --bare https://dev.azure.com/tbs-sct/GCExchange/_git/$REPO_NAME Sync_directory
-    cd Sync_directory
-    git remote add --mirror=fetch upstream https://github.com/gcxchange-gcechange/$REPO_NAME
-    git fetch upstream --tags
-    git -c http.extraHeader="Authorization: Basic ${B64_PAT}" push origin --all
-  env:
-    PAT: $(PAT)
-    REPO_NAME: "appsvc_fnc_dev_userssynch"
-  displayName: 'Sync repo'
