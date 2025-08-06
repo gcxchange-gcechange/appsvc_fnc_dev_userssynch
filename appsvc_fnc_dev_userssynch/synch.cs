@@ -26,7 +26,8 @@ namespace appsvc_fnc_dev_userssynch
         {
             log.LogInformation("C# HTTP trigger function processed a request.");
 
-            try {
+            try
+            {
                 var config = new ConfigurationBuilder().SetBasePath(context.FunctionAppDirectory).AddJsonFile("local.settings.json", true, true).AddEnvironmentVariables().Build();
 
                 string accountName = config["accountName"];           // stsyncostdps
@@ -43,12 +44,12 @@ namespace appsvc_fnc_dev_userssynch
                 do
                 {
                     // Get domain config file
-                    
+
                     // Connect to the blob storage
                     CloudBlobClient serviceClient = storageAccount.CreateCloudBlobClient();
-                    
+
                     // Connect to the blob container
-                    CloudBlobContainer containerRef = serviceClient.GetContainerReference($"{containerNameRef}");   
+                    CloudBlobContainer containerRef = serviceClient.GetContainerReference($"{containerNameRef}");
 
                     // Connect to the blob file
                     CloudBlockBlob blobRef = containerRef.GetBlockBlobReference($"{fileNameDomain}");
@@ -91,11 +92,13 @@ namespace appsvc_fnc_dev_userssynch
                         {
                             GraphServiceClient graphAPIAuth;
 
-                            try {
+                            try
+                            {
                                 Auth auth = new Auth();
                                 graphAPIAuth = auth.graphAuth(group_alias, tenantid, log);
                             }
-                            catch {
+                            catch
+                            {
                                 log.LogError($"Authentication failure for group_alias: {group_alias}");
                                 authFailureList.Add(group_alias);
                                 continue;
@@ -112,19 +115,30 @@ namespace appsvc_fnc_dev_userssynch
                             {
                                 List<User> users = new List<User>();
 
-                                var group = await graphAPIAuth.Groups[groupid.ToString()].Request().GetAsync();
-                                log.LogInformation($"groups: {group.Id}");
-
-                                var groupMembers = await graphAPIAuth.Groups[groupid.ToString()].TransitiveMembers.Request().Select("userType,mail,accountEnabled,displayName,id").GetAsync();
-                                users.AddRange(groupMembers.CurrentPage.OfType<User>());
-
-                                // fetch next page
-                                while (groupMembers.NextPageRequest != null)
+                                // fix for expired client secrets - OP
+                                try
                                 {
-                                    groupMembers = await groupMembers.NextPageRequest.GetAsync();
+                                    var group = await graphAPIAuth.Groups[groupid.ToString()].Request().GetAsync();
+                                    log.LogInformation($"groups: {group.Id}");
+
+                                    var groupMembers = await graphAPIAuth.Groups[groupid.ToString()].TransitiveMembers.Request().Select("userType,mail,accountEnabled,displayName,id").GetAsync();
                                     users.AddRange(groupMembers.CurrentPage.OfType<User>());
+
+                                    // fetch next page
+                                    while (groupMembers.NextPageRequest != null)
+                                    {
+                                        groupMembers = await groupMembers.NextPageRequest.GetAsync();
+                                        users.AddRange(groupMembers.CurrentPage.OfType<User>());
+                                    }
+
+                                    log.LogInformation("Start on group " + groupid);
                                 }
-                                log.LogInformation("Start on group " + groupid);
+                                catch (Exception ex)
+                                {
+                                    log.LogError($"Failed to retrieve group for groupid: {groupid} and group_alias: {group_alias}. Error message: {ex.Message}");
+                                    authFailureList.Add(group_alias);
+                                    continue;
+                                }
 
                                 // List of user
                                 List<string> userList = new List<string>();
@@ -186,7 +200,13 @@ namespace appsvc_fnc_dev_userssynch
                                 positiongroupname++;
                             }
 
-                            string resultUserList = stringUserList.Remove(stringUserList.Length - 1);
+                            // conditional statement to fix the index out of bounds error - OP
+                            string resultUserList = string.Empty;
+                            if (stringUserList.Length > 0)
+                            {
+                                resultUserList = stringUserList.Remove(stringUserList.Length - 1);
+                            }
+
                             // Create content files
                             var stringInsideTheFile = $"{{\"B2BGroupSyncAlias\": \"{group_alias}\",\"groupAliasToUsersMapping\":{{ {resultUserList} }} }}";
                             var statustext = "Ready";
@@ -234,7 +254,7 @@ namespace appsvc_fnc_dev_userssynch
                             log.LogInformation("File already exist " + FileTitle);
                         }
                     }
-                    
+
                     if (authFailureList.Count > 0)
                     {
                         SendAuthFailureList(config["authFailureNotificationList"], authFailureList, log);
@@ -243,7 +263,8 @@ namespace appsvc_fnc_dev_userssynch
                     token = queryResult.ContinuationToken;
                 } while (token != null);
             }
-            catch (Exception e) {
+            catch (Exception e)
+            {
 
                 log.LogError($"Message: {e.Message}");
                 if (e.InnerException is not null) log.LogError($"InnerException: {e.InnerException.Message}");
@@ -268,7 +289,7 @@ namespace appsvc_fnc_dev_userssynch
 
             sb.AppendLine($"</table>");
 
-            Email.SendEmail(emailNotificationList, "["+ group_alias.ToUpper() +"] GXChange User Synch Report", sb.ToString(), log);
+            Email.SendEmail(emailNotificationList, "[" + group_alias.ToUpper() + "] GXChange User Synch Report", sb.ToString(), log);
         }
 
         private static void SendAuthFailureList(string emailNotificationList, List<string> failureList, ILogger log)
