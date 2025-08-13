@@ -1,5 +1,4 @@
 using Microsoft.WindowsAzure.Storage.Table;
-using System.Linq;
 
 namespace appsvc_fnc_dev_userssynch
 {
