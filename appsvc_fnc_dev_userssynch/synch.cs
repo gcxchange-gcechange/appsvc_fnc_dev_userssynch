@@ -1,34 +1,37 @@
-using System;
-using System.IO;
-using System.Threading.Tasks;
-using Microsoft.Azure.WebJobs;
+using Azure.Identity;
+using Azure.Storage.Blobs;
+using Microsoft.Azure.Functions.Worker;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json;
 using Microsoft.Graph;
-using System.Collections.Generic;
+using Microsoft.Graph.Models;
+using Microsoft.Kiota.Abstractions;
 using Microsoft.WindowsAzure.Storage;
 using Microsoft.WindowsAzure.Storage.Blob;
-using Microsoft.Extensions.Configuration;
-using System.Linq;
 using Microsoft.WindowsAzure.Storage.Table;
-using Azure.Storage.Blobs;
-using Azure.Identity;
+using Newtonsoft.Json;
 using System.Text;
-using Microsoft.AspNetCore.Mvc;
 
 namespace appsvc_fnc_dev_userssynch
 {
-    public static class synch
+    public class Synch
     {
+        private readonly ILogger<Synch> log;
+
+        public Synch(ILogger<Synch> logger)
+        {
+            log = logger;
+        }
+
         // Run every hour
-        [FunctionName("synch")]
-        public static async Task Run([TimerTrigger(" 0 */60 * * * *")] TimerInfo myTimer, ExecutionContext context, ILogger log)
+        [Function("Synch")]
+        public async Task Run([TimerTrigger(" 0 */60 * * * *")] TimerInfo myTimer)
         {
             log.LogInformation("C# HTTP trigger function processed a request.");
 
             try
             {
-                var config = new ConfigurationBuilder().SetBasePath(context.FunctionAppDirectory).AddJsonFile("local.settings.json", true, true).AddEnvironmentVariables().Build();
+                var config = new ConfigurationBuilder().SetBasePath(Environment.CurrentDirectory).AddJsonFile("local.settings.json", true, true).AddEnvironmentVariables().Build();
 
                 string accountName = config["accountName"];           // stsyncostdps
                 string containerNameRef = config["containerNameRef"]; // reference
@@ -72,6 +75,7 @@ namespace appsvc_fnc_dev_userssynch
                         string group_alias = item.group_alias;
                         string allgroupid = item.group_id;
                         string allgroupname = item.group_name;
+
 
                         log.LogInformation($"Start with {group_alias}");
 
@@ -118,17 +122,27 @@ namespace appsvc_fnc_dev_userssynch
                                 // fix for expired client secrets - OP
                                 try
                                 {
-                                    var group = await graphAPIAuth.Groups[groupid.ToString()].Request().GetAsync();
+                                    var group = await graphAPIAuth.Groups[groupid.ToString()].GetAsync();
                                     log.LogInformation($"groups: {group.Id}");
 
-                                    var groupMembers = await graphAPIAuth.Groups[groupid.ToString()].TransitiveMembers.Request().Select("userType,mail,accountEnabled,displayName,id").GetAsync();
-                                    users.AddRange(groupMembers.CurrentPage.OfType<User>());
-
-                                    // fetch next page
-                                    while (groupMembers.NextPageRequest != null)
+                                    var groupMembers = await graphAPIAuth.Groups[groupid.ToString()].TransitiveMembers.GetAsync((requestConfiguration) =>
                                     {
-                                        groupMembers = await groupMembers.NextPageRequest.GetAsync();
-                                        users.AddRange(groupMembers.CurrentPage.OfType<User>());
+                                        requestConfiguration.QueryParameters.Select = new string[] { "userType", "mail", "accountEnabled", "displayName", "id" };
+                                    });
+
+                                    users.AddRange(groupMembers.Value.OfType<User>());
+
+                                    // check nextlink for more data from the collection
+                                    while (groupMembers.OdataNextLink != null)
+                                    {
+                                        var nextPageRequestInformation = new RequestInformation
+                                        {
+                                            HttpMethod = Method.GET,
+                                            UrlTemplate = groupMembers.OdataNextLink
+                                        };
+
+                                        groupMembers = await graphAPIAuth.RequestAdapter.SendAsync(nextPageRequestInformation, (parseNode) => new DirectoryObjectCollectionResponse());
+                                        users.AddRange(groupMembers.Value.OfType<User>());
                                     }
 
                                     log.LogInformation("Start on group " + groupid);
@@ -152,7 +166,6 @@ namespace appsvc_fnc_dev_userssynch
                                     // check if user is a guest
                                     if (user.UserType != "Guest" && user.Mail != null && user.AccountEnabled == true)
                                     {
-
                                         // get user domain
                                         string UserDomain = user.Mail.Split("@")[1];
                                         bool domainMatch = false;
@@ -195,6 +208,7 @@ namespace appsvc_fnc_dev_userssynch
                                         rejectedList.Add(account);
                                     }
                                 }
+
                                 var res = string.Join("\",\"", userList);
                                 stringUserList += $"\"{array_groupname[positiongroupname]}\":[\"{res}\"],";
                                 positiongroupname++;
