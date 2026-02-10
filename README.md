@@ -41,19 +41,21 @@ MSGraph
 
 ## App setting
 
-| Name                    | Description                                                                    |
-| ----------------------- | ------------------------------------------------------------------------------ |
-| AzureWebJobsStorage     | Connection string for the storage acoount                                      |
-| clientId                | The application (client) ID of the app registration                            |
-| delegatedUserName       | User principal name for the service account that reads application and secrets |
-| delegatedUserSecret     | Secret name for delegatedUserName                                              |
-| emailUserId			  | Object Id for the email user account                                           |
-| emailUserName           | Email address used to send notifications                                       |
-| emailUserSecret         | Secret name for emailUserSecret                                                |
-| keyVaultUrl             | Address for the key vault                                                      |
-| recipientAddress        | Email address(es) that receive notifications                                   |
-| secretName              | Secret name used to authorize the function app                                 |
-| tenantId                | Id of the Azure tenant that hosts the function app                             |
+| Name                        | Description                                                                     |
+| --------------------------- | ------------------------------------------------------------------------------  |
+| AzureWebJobsStorage         | Connection string for the storage acoount                                       |
+| authFailureNotificationList | comma separated list of mailboxes to notify when authorization fails            |
+| clientId                    | The application (client) ID of the app registration                             |
+| delegatedUserName           | User principal name for the service account that reads application and secrets  |
+| delegatedUserSecret         | Secret name for delegatedUserName                                               |
+| emailUserId			            | Object Id for the email user account                                            |
+| emailUserName               | Email address used to send notifications                                        |
+| emailUserSecret             | Secret name for emailUserSecret                                                 |
+| logUserSyncIssues           | Boolean (1 or 0) used to decide if individual user sync issues should be logged |
+| keyVaultUrl                 | Address for the key vault                                                       |
+| recipientAddress            | Email address(es) that receive notifications                                    |
+| secretName                  | Secret name used to authorize the function app                                  |
+| tenantId                    | Id of the Azure tenant that hosts the function app                              |
 
 ## Version history
 
