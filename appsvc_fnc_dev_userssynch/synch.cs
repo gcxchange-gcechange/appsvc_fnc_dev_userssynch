@@ -33,10 +33,11 @@ namespace appsvc_fnc_dev_userssynch
             {
                 var config = new ConfigurationBuilder().SetBasePath(Environment.CurrentDirectory).AddJsonFile("local.settings.json", true, true).AddEnvironmentVariables().Build();
 
-                string accountName = config["accountName"];           // stsyncostdps
-                string containerNameRef = config["containerNameRef"]; // reference
-                string tableName = config["tableName"];               // UserSyncRef
-                string fileNameDomain = config["fileNameDomain"];     // domain-config.json
+                string accountName = config["accountName"];             // stsyncostdps
+                string containerNameRef = config["containerNameRef"];   // reference
+                string tableName = config["tableName"];                 // UserSyncRef
+                string fileNameDomain = config["fileNameDomain"];       // domain-config.json
+                string logUserSyncIssues = config["logUserSyncIssues"]; // 1 = true; 0 = false
 
                 CloudStorageAccount storageAccount = CloudStorageAccount.Parse(config["AzureWebJobsStorage"]);  // AccountName=stsynchdevstd
 
@@ -179,9 +180,12 @@ namespace appsvc_fnc_dev_userssynch
                                                 domainMatch = true;
                                             }
                                         }
+
                                         if (!domainMatch)
                                         {
-                                            log.LogError($"User domain does not exist {user.Mail}.");
+                                            if (logUserSyncIssues == "1") {
+                                                log.LogError($"User domain does not exist {user.Mail}.");
+                                            }
                                             reason = $"User domain does not exist {user.Mail}.";
                                         }
                                     }
@@ -196,7 +200,9 @@ namespace appsvc_fnc_dev_userssynch
                                         else
                                             reason = "Other";
 
-                                        log.LogWarning($"User is a guest, no email or disable {user.DisplayName} - {user.Id}. Reason: {reason}");
+                                        if (logUserSyncIssues == "1") {
+                                            log.LogWarning($"User is a guest, no email or disable {user.DisplayName} - {user.Id}. Reason: {reason}");
+                                        }
                                     }
 
                                     if (reason != string.Empty)
