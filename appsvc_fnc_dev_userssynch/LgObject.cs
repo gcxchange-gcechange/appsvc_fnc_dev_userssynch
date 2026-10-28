@@ -1,4 +1,5 @@
-using Microsoft.WindowsAzure.Storage.Table;
+using Azure;
+using Azure.Data.Tables;
 
 namespace appsvc_fnc_dev_userssynch
 {
@@ -7,7 +8,7 @@ namespace appsvc_fnc_dev_userssynch
         public string Email { get; set; }
     }
 
-    public class Table_Ref : TableEntity
+    public class Table_Ref : ITableEntity
     {
         public Table_Ref(string skey, string srow)
         {
@@ -22,7 +23,10 @@ namespace appsvc_fnc_dev_userssynch
         public string group_alias { get; set; }
         public string group_id { get; set; }
         public string group_name { get; set; }
-
+        public string PartitionKey { get; set; }
+        public string RowKey { get; set; }
+        public DateTimeOffset? Timestamp { get; set; }
+        public ETag ETag { get; set; }
     }
 
     public class UserDomainList

@@ -1,3 +1,5 @@
+using Azure;
+using Azure.Data.Tables;
 using Azure.Identity;
 using Azure.Storage.Blobs;
 using Microsoft.Azure.Functions.Worker;
@@ -6,9 +8,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Graph;
 using Microsoft.Graph.Models;
 using Microsoft.Kiota.Abstractions;
-using Microsoft.WindowsAzure.Storage;
-using Microsoft.WindowsAzure.Storage.Blob;
-using Microsoft.WindowsAzure.Storage.Table;
 using Newtonsoft.Json;
 using System.Text;
 
@@ -23,275 +22,270 @@ namespace appsvc_fnc_dev_userssynch
             log = logger;
         }
 
-        // Run every hour
+        // Every hour, at minute 0.
         [Function("Synch")]
-        public async Task Run([TimerTrigger(" 0 */60 * * * *")] TimerInfo myTimer)
+        public async Task Run([TimerTrigger("0 0 * * * *")] TimerInfo myTimer)
         {
-            log.LogInformation("C# HTTP trigger function processed a request.");
+            log.LogInformation("User synchronization timer trigger started.");
 
             try
             {
-                var config = new ConfigurationBuilder().SetBasePath(Environment.CurrentDirectory).AddJsonFile("local.settings.json", true, true).AddEnvironmentVariables().Build();
+                var config = new ConfigurationBuilder().SetBasePath(Environment.CurrentDirectory).AddJsonFile("local.settings.json", optional: true, reloadOnChange: true).AddEnvironmentVariables().Build();
 
                 string accountName = config["accountName"];             // stsyncostdps
                 string containerNameRef = config["containerNameRef"];   // reference
                 string tableName = config["tableName"];                 // UserSyncRef
                 string fileNameDomain = config["fileNameDomain"];       // domain-config.json
                 string logUserSyncIssues = config["logUserSyncIssues"]; // 1 = true; 0 = false
+                string storageConnectionString = config["AzureWebJobsStorage"];
 
-                CloudStorageAccount storageAccount = CloudStorageAccount.Parse(config["AzureWebJobsStorage"]);  // AccountName=stsynchdevstd
+                // Replaces CloudStorageAccount / CloudBlobClient.
+                var blobServiceClient = new BlobServiceClient(storageConnectionString);
 
-                CloudTableClient tableClient = storageAccount.CreateCloudTableClient();
-                CloudTable table = tableClient.GetTableReference(tableName);
-                TableContinuationToken token = null;
+                // Replaces CloudTableClient / CloudTable.
+                var tableClient = new TableClient(storageConnectionString, tableName);
 
-                do
+                // Existing managed identity credential used for destination containers.
+                var credential = new DefaultAzureCredential();
+
+                // Get the reference domain JSON once, rather than once per table page.
+                BlobClient domainConfigBlob = blobServiceClient.GetBlobContainerClient(containerNameRef).GetBlobClient(fileNameDomain);
+
+                string domainConfigJson = (await domainConfigBlob.DownloadContentAsync()).Value.Content.ToString();
+
+                var domainsList = JsonConvert.DeserializeObject<List<UserDomainList>>(domainConfigJson) ?? new List<UserDomainList>();
+
+                var authFailureList = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                // QueryAsync handles continuation tokens/pages internally.
+                await foreach (TableEntity item in tableClient.QueryAsync<TableEntity>())
                 {
-                    // Get domain config file
+                    string tenantId = item.GetString("tenant_id");
+                    string groupAlias = item.GetString("group_alias");
+                    string allGroupId = item.GetString("group_id");
+                    string allGroupName = item.GetString("group_name");
 
-                    // Connect to the blob storage
-                    CloudBlobClient serviceClient = storageAccount.CreateCloudBlobClient();
-
-                    // Connect to the blob container
-                    CloudBlobContainer containerRef = serviceClient.GetContainerReference($"{containerNameRef}");
-
-                    // Connect to the blob file
-                    CloudBlockBlob blobRef = containerRef.GetBlockBlobReference($"{fileNameDomain}");
-
-                    // Get the blob file as text
-                    string contents = blobRef.DownloadTextAsync().Result;
-
-                    var domainsList = JsonConvert.DeserializeObject<List<UserDomainList>>(contents);
-
-                    var q = new TableQuery<Table_Ref>();
-                    var queryResult = await table.ExecuteQuerySegmentedAsync(q, token);
-
-                    List<string> authFailureList = new();
-
-                    foreach (var item in queryResult.Results)
+                    if (string.IsNullOrWhiteSpace(tenantId) || string.IsNullOrWhiteSpace(groupAlias) || string.IsNullOrWhiteSpace(allGroupId) || string.IsNullOrWhiteSpace(allGroupName))
                     {
-                        // Note: client_id is not taken from the table data, it is taken from the keyvault
-                        string rg_code = item.rg_code;
-                        string tenantid = item.tenant_id;
-                        string group_alias = item.group_alias;
-                        string allgroupid = item.group_id;
-                        string allgroupname = item.group_name;
+                        log.LogWarning("Skipping table entity {PartitionKey}/{RowKey}: required values are missing.", item.PartitionKey, item.RowKey);
+                        continue;
+                    }
 
+                    log.LogInformation("Starting synchronization for {GroupAlias}", groupAlias);
 
-                        log.LogInformation($"Start with {group_alias}");
+                    string fileTitle = $"{groupAlias}-b2b-sync-group-memberships.json";
 
-                        // Create File Title
-                        string FileTitle = $"{group_alias}-b2b-sync-group-memberships.json";
-                        string FileTitleStatus = $"{group_alias}-group-sync-status.txt.";
-                        string departcontainerName = $"{group_alias.ToLower()}-aad-to-gcx-b2b-sync-data";
+                    // Preserves the original filename, including the final period.
+                    // Remove the final "." only if it was accidental and downstream
+                    // consumers expect a ".txt" filename.
+                    string fileTitleStatus = $"{groupAlias}-group-sync-status.txt.";
+                    string departmentContainerName = $"{groupAlias.ToLowerInvariant()}-aad-to-gcx-b2b-sync-data";
 
-                        // Construct the blob container endpoint from the arguments.
-                        string containerEndpoint = string.Format("https://{0}.blob.core.windows.net/{1}", accountName, departcontainerName);
+                    var destinationContainerClient = new BlobContainerClient(new Uri($"https://{accountName}.blob.core.windows.net/{departmentContainerName}"), credential);
 
-                        // Get a credential and create a service client object for the blob container.
-                        BlobContainerClient containerClient = new BlobContainerClient(new Uri(containerEndpoint), new DefaultAzureCredential());
+                    BlobClient outputBlob = destinationContainerClient.GetBlobClient(fileTitle);
 
-                        var blobClient = containerClient.GetBlobClient(FileTitle);
+                    if ((await outputBlob.ExistsAsync()).Value)
+                    {
+                        log.LogInformation("Output file already exists: {FileTitle}", fileTitle);
+                        continue;
+                    }
 
-                        if (!blobClient.Exists())
+                    GraphServiceClient graphApiAuth;
+
+                    try
+                    {
+                        Auth auth = new Auth();
+                        graphApiAuth = auth.graphAuth(groupAlias, tenantId, log);
+                    }
+                    catch (Exception ex)
+                    {
+                        log.LogError(ex, "Authentication failure for group alias {GroupAlias}", groupAlias);
+                        authFailureList.Add(groupAlias);
+                        continue;
+                    }
+
+                    string[] groupIds = allGroupId.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                    string[] groupNames = allGroupName.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+                    if (groupIds.Length != groupNames.Length)
+                    {
+                        log.LogError("Group ID/name count mismatch for {GroupAlias}. IDs: {IdCount}, names: {NameCount}.", groupAlias, groupIds.Length, groupNames.Length);
+                        continue;
+                    }
+
+                    var rejectedList = new List<UserAccount>();
+
+                    var groupAliasToUsersMapping = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+
+                    for (int groupIndex = 0; groupIndex < groupIds.Length; groupIndex++)
+                    {
+                        string groupId = groupIds[groupIndex];
+                        string groupName = groupNames[groupIndex];
+
+                        var users = new List<User>();
+
+                        try
                         {
-                            GraphServiceClient graphAPIAuth;
+                            var group = await graphApiAuth.Groups[groupId].GetAsync();
 
-                            try
+                            log.LogInformation("Retrieved group {GroupId} for alias {GroupAlias}", group?.Id, groupAlias);
+
+                            var groupMembers =  await graphApiAuth.Groups[groupId].TransitiveMembers.GetAsync(requestConfiguration => {requestConfiguration.QueryParameters.Select = ["userType", "mail", "accountEnabled", "displayName", "id"];});
+
+                            if (groupMembers?.Value is not null)
                             {
-                                Auth auth = new Auth();
-                                graphAPIAuth = auth.graphAuth(group_alias, tenantid, log);
-                            }
-                            catch
-                            {
-                                log.LogError($"Authentication failure for group_alias: {group_alias}");
-                                authFailureList.Add(group_alias);
-                                continue;
+                                users.AddRange(groupMembers.Value.OfType<User>());
                             }
 
-                            string stringUserList = "";
-                            //Get all group id
-                            var array_groupid = allgroupid.Split(",");
-                            var array_groupname = allgroupname.Split(",");
-                            var positiongroupname = 0;
-                            List<UserAccount> rejectedList = new List<UserAccount>();
-
-                            foreach (var groupid in array_groupid)
+                            while (!string.IsNullOrEmpty(groupMembers?.OdataNextLink))
                             {
-                                List<User> users = new List<User>();
-
-                                // fix for expired client secrets - OP
-                                try
+                                var nextPageRequestInformation = new RequestInformation
                                 {
-                                    var group = await graphAPIAuth.Groups[groupid.ToString()].GetAsync();
-                                    log.LogInformation($"groups: {group.Id}");
+                                    HttpMethod = Method.GET,
+                                    UrlTemplate = groupMembers.OdataNextLink
+                                };
 
-                                    var groupMembers = await graphAPIAuth.Groups[groupid.ToString()].TransitiveMembers.GetAsync((requestConfiguration) =>
-                                    {
-                                        requestConfiguration.QueryParameters.Select = new string[] { "userType", "mail", "accountEnabled", "displayName", "id" };
-                                    });
+                                groupMembers = await graphApiAuth.RequestAdapter.SendAsync(nextPageRequestInformation, parseNode => new DirectoryObjectCollectionResponse());
 
+                                if (groupMembers?.Value is not null)
+                                {
                                     users.AddRange(groupMembers.Value.OfType<User>());
-
-                                    // check nextlink for more data from the collection
-                                    while (groupMembers.OdataNextLink != null)
-                                    {
-                                        var nextPageRequestInformation = new RequestInformation
-                                        {
-                                            HttpMethod = Method.GET,
-                                            UrlTemplate = groupMembers.OdataNextLink
-                                        };
-
-                                        groupMembers = await graphAPIAuth.RequestAdapter.SendAsync(nextPageRequestInformation, (parseNode) => new DirectoryObjectCollectionResponse());
-                                        users.AddRange(groupMembers.Value.OfType<User>());
-                                    }
-
-                                    log.LogInformation("Start on group " + groupid);
                                 }
-                                catch (Exception ex)
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            log.LogError(ex, "Failed to retrieve group {GroupId} for group alias {GroupAlias}.", groupId, groupAlias);
+                            authFailureList.Add(groupAlias);
+                            continue;
+                        }
+
+                        var validUsers = new List<string>();
+
+                        foreach (User user in users)
+                        {
+                            string reason = string.Empty;
+
+                            if (!string.Equals(user.UserType, "Guest", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(user.Mail) && user.AccountEnabled == true)
+                            {
+                                string userDomain = user.Mail.Split('@').Last();
+                                bool domainMatch = false;
+
+                                foreach (var domain in domainsList)
                                 {
-                                    log.LogError($"Failed to retrieve group for groupid: {groupid} and group_alias: {group_alias}. Error message: {ex.Message}");
-                                    authFailureList.Add(group_alias);
-                                    continue;
-                                }
-
-                                // List of user
-                                List<string> userList = new List<string>();
-                                string reason = string.Empty;
-                                UserAccount account;
-
-                                foreach (var user in users)
-                                {
-                                    reason = string.Empty;
-
-                                    // check if user is a guest
-                                    if (user.UserType != "Guest" && user.Mail != null && user.AccountEnabled == true)
+                                    if (domain.UserDomains.Contains(userDomain, StringComparer.OrdinalIgnoreCase))
                                     {
-                                        // get user domain
-                                        string UserDomain = user.Mail.Split("@")[1];
-                                        bool domainMatch = false;
-
-                                        // check if domain part of the domain list
-                                        foreach (var domain in domainsList)
-                                        {
-                                            if (domain.UserDomains.Contains(UserDomain.ToLower()))
-                                            {
-                                                userList.Add(user.Mail);
-                                                domainMatch = true;
-                                            }
-                                        }
-
-                                        if (!domainMatch)
-                                        {
-                                            if (logUserSyncIssues == "1") {
-                                                log.LogError($"User domain does not exist {user.Mail}.");
-                                            }
-                                            reason = $"User domain does not exist {user.Mail}.";
-                                        }
-                                    }
-                                    else
-                                    {
-                                        if (user.UserType == "Guest")
-                                            reason = "User is a guest";
-                                        else if (user.Mail == null)
-                                            reason = "User has no email";
-                                        else if (user.AccountEnabled != true)
-                                            reason = "User account is disabled";
-                                        else
-                                            reason = "Other";
-
-                                        if (logUserSyncIssues == "1") {
-                                            log.LogWarning($"User is a guest, no email or disable {user.DisplayName} - {user.Id}. Reason: {reason}");
-                                        }
-                                    }
-
-                                    if (reason != string.Empty)
-                                    {
-                                        account = new UserAccount();
-                                        account.DisplaName = user.DisplayName;
-                                        account.EmailAddress = user.Mail;
-                                        account.ReasonForRejection = reason;
-                                        rejectedList.Add(account);
+                                        validUsers.Add(user.Mail);
+                                        domainMatch = true;
+                                        break;
                                     }
                                 }
 
-                                var res = string.Join("\",\"", userList);
-                                stringUserList += $"\"{array_groupname[positiongroupname]}\":[\"{res}\"],";
-                                positiongroupname++;
-                            }
-
-                            // conditional statement to fix the index out of bounds error - OP
-                            string resultUserList = string.Empty;
-                            if (stringUserList.Length > 0)
-                            {
-                                resultUserList = stringUserList.Remove(stringUserList.Length - 1);
-                            }
-
-                            // Create content files
-                            var stringInsideTheFile = $"{{\"B2BGroupSyncAlias\": \"{group_alias}\",\"groupAliasToUsersMapping\":{{ {resultUserList} }} }}";
-                            var statustext = "Ready";
-
-                            // Upload text to a new block blob.
-                            byte[] byteArray = Encoding.ASCII.GetBytes(stringInsideTheFile);
-
-                            using (MemoryStream stream = new MemoryStream(byteArray))
-                            {
-                                await containerClient.UploadBlobAsync(FileTitle, stream);
-                            }
-
-                            byte[] byteArrayStatus = Encoding.ASCII.GetBytes(statustext);
-
-                            using (MemoryStream stream = new MemoryStream(byteArrayStatus))
-                            {
-                                await containerClient.UploadBlobAsync(FileTitleStatus, stream);
-                            }
-
-                            if (rejectedList.Count > 0)
-                            {
-                                string notificationFileName = $"{group_alias.ToUpper()}-To-GCX-B2B-Sync.json";
-                                BlobContainerClient blobContainerClient = new BlobContainerClient(new Uri(string.Format("https://{0}.blob.core.windows.net/{1}", accountName, "b2b-sync-config")), new DefaultAzureCredential());
-                                var bc = blobContainerClient.GetBlobClient(notificationFileName);
-
-                                if (bc.Exists())
+                                if (!domainMatch)
                                 {
-                                    using (var stream = await bc.OpenReadAsync())
-                                    using (var sr = new StreamReader(stream))
-                                    using (var jr = new JsonTextReader(sr))
+                                    reason = $"User domain does not exist: {user.Mail}.";
+
+                                    if (logUserSyncIssues == "1")
                                     {
-                                        var result = JsonSerializer.CreateDefault().Deserialize<EmailNotificationList>(jr);
-                                        log.LogInformation($"EmailNotificationList: {string.Join(",", result.EmailNotificationListForUsersThatCannotBeInvited)}");
-                                        SendRejectedList(string.Join(",", result.EmailNotificationListForUsersThatCannotBeInvited), rejectedList, group_alias, log);
+                                        log.LogError("{Reason}", reason);
                                     }
+                                }
+                            }
+                            else
+                            {
+                                if (string.Equals(user.UserType, "Guest", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    reason = "User is a guest.";
+                                }
+                                else if (string.IsNullOrWhiteSpace(user.Mail))
+                                {
+                                    reason = "User has no email.";
+                                }
+                                else if (user.AccountEnabled != true)
+                                {
+                                    reason = "User account is disabled.";
                                 }
                                 else
                                 {
-                                    log.LogError($"File {notificationFileName} not found");
+                                    reason = "Other.";
                                 }
+
+                                if (logUserSyncIssues == "1")
+                                {
+                                    log.LogWarning("User rejected: {DisplayName} ({UserId}). Reason: {Reason}", user.DisplayName, user.Id, reason);
+                                }
+                            }
+
+                            if (!string.IsNullOrEmpty(reason))
+                            {
+                                rejectedList.Add(new UserAccount
+                                {
+                                    DisplaName = user.DisplayName,
+                                    EmailAddress = user.Mail,
+                                    ReasonForRejection = reason
+                                });
+                            }
+                        }
+
+                        groupAliasToUsersMapping[groupName] = validUsers;
+                    }
+
+                    // Safer than manually composing JSON: correctly escapes names and emails.
+                    string outputJson = JsonConvert.SerializeObject(new
+                    {
+                        B2BGroupSyncAlias = groupAlias,
+                        groupAliasToUsersMapping
+                    });
+
+                    // Creates a new blob and fails if it was created between ExistsAsync and UploadAsync.
+                    await outputBlob.UploadAsync(BinaryData.FromString(outputJson), overwrite: false);
+
+                    BlobClient statusBlob = destinationContainerClient.GetBlobClient(fileTitleStatus);
+
+                    await statusBlob.UploadAsync(BinaryData.FromString("Ready"), overwrite: false);
+
+                    if (rejectedList.Count > 0)
+                    {
+                        string notificationFileName = $"{groupAlias.ToUpperInvariant()}-To-GCX-B2B-Sync.json";
+
+                        var notificationContainerClient = new BlobContainerClient(new Uri($"https://{accountName}.blob.core.windows.net/b2b-sync-config"), credential);
+
+                        BlobClient notificationBlob = notificationContainerClient.GetBlobClient(notificationFileName);
+
+                        if ((await notificationBlob.ExistsAsync()).Value)
+                        {
+                            string notificationJson = (await notificationBlob.DownloadContentAsync()).Value.Content.ToString();
+
+                            var notification = JsonConvert.DeserializeObject<EmailNotificationList>(notificationJson);
+
+                            var recipients = notification.EmailNotificationListForUsersThatCannotBeInvited;
+
+                            if (recipients is not null)
+                            {
+                                SendRejectedList(string.Join(",", recipients), rejectedList, groupAlias, log);
                             }
                         }
                         else
                         {
-                            log.LogInformation("File already exist " + FileTitle);
+                            log.LogError("Notification configuration file not found: {FileName}", notificationFileName);
                         }
                     }
+                }
 
-                    if (authFailureList.Count > 0)
-                    {
-                        SendAuthFailureList(config["authFailureNotificationList"], authFailureList, log);
-                    }
-
-                    token = queryResult.ContinuationToken;
-                } while (token != null);
+                if (authFailureList.Count > 0)
+                {
+                    SendAuthFailureList(config["authFailureNotificationList"] ?? string.Empty, authFailureList.ToList(), log);
+                }
             }
-            catch (Exception e)
+            catch (Exception ex)
             {
-
-                log.LogError($"Message: {e.Message}");
-                if (e.InnerException is not null) log.LogError($"InnerException: {e.InnerException.Message}");
-                log.LogError($"StackTrace: {e.StackTrace}");
-
+                log.LogError(ex, "User synchronization failed.");
             }
         }
+
+        // Keep SendRejectedList and SendAuthFailureList unchanged.
+
 
         private static void SendRejectedList(string emailNotificationList, List<UserAccount> rejectedList, string group_alias, ILogger log)
         {
@@ -329,5 +323,7 @@ namespace appsvc_fnc_dev_userssynch
 
             Email.SendEmail(emailNotificationList, "GXChange User Synch Authentication Failure Report", sb.ToString(), log);
         }
+
+
     }
 }
